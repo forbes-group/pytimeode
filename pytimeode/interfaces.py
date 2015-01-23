@@ -170,91 +170,6 @@ class IStateWithNormalize(IState):
         to be orthogonalized."""
 
 
-class IStateForDFT(IState):
-    N_l = Attribute("N_l",
-                    """List of sizes for each quantum number l.  The length of
-                    this list is the number of quantum numbers.""")
-    mu = Attribute("mu", "Current chemical potential")
-    data_aux = Attribute("data_aux", "Auxilliary data.")
-
-    # These attributes are not for general use, but common in all DFT
-    # formulations
-    components = Attribute("components", "Number of components.")
-    states = Attribute("states", "Number of states.")
-
-    def __getitem__(key=None):
-        """Return the wavefunctions corresponding to the specified quantum
-        numbers, components, etc."""
-
-
-class IStateMisc(Interface):
-    """Additional items for convenience but not needed by evolvers etc."""
-
-    def apply_K():
-        raise NotImplementedError
-
-    def apply_V(v=None):
-        raise NotImplementedError
-
-    #basis = IBasis()
-    #problem = IProblem()
-
-
-
-class IBasis(object):
-    N_l = []
-    r = np.array([])
-    rs = []                     # High-performance version of get_abscissa
-
-    def get_abscissa(self, l=0):
-        raise NotImplementedError
-
-    def expand(self, y, key, r=None):
-        raise NotImplementedError
-
-    def spline(self, f):
-        raise NotImplementedError
-
-    def interp(self, f, l):
-        raise NotImplementedError
-
-    def integrate(self, f, l=None):
-        raise NotImplementedError
-
-    def get_K(self, l, l_explicit=None):
-        raise NotImplementedError
-
-
-class IModel(object):
-    Ec = float
-
-    def get_densities(self, y):
-        raise NotImplementedError
-
-    def get_potentials(self, densities, mu_ext):
-        raise NotImplementedError
-
-    def diagonalize_and_set_y(self, y, mu_ext, potentials):
-        raise NotImplementedError
-
-    def get_m_effs(self, y):
-        """Return the effective masses for each component."""
-        raise NotImplementedError
-
-    def get_V(self, y, v_ext):
-        raise NotImplementedError
-
-
-class IProblem(object):
-    model = IModel()
-
-    def set_time(self, t):
-        raise NotImplementedError
-
-    def v_ext(self, r):
-        raise NotImplementedError
-
-
 ######################################################################
 # Defaults
 #
@@ -349,11 +264,3 @@ class StateMixin(object):
                     kw[_k] = kw[_k][l]
 
             expr(out=self[l], **kw)
-
-
-class StateDFTBase(StateMixin):
-    """Some defaults for DFT states"""
-    N_l = []
-    potentials = np.array([])
-    mu = None
-    data_aux = {}
