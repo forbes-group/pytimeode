@@ -1,0 +1,2 @@
+[hooks]
+pre-commit = make pre-commit
