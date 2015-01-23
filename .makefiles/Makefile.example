@@ -1,0 +1,7 @@
+# Simple makefile with common rules.
+
+# Use the following to gather all of the README.html files into _html
+# RST_HTML_OUTPUT = _html
+
+makefiles_dir = .makefiles
+include $(makefiles_dir)/rst2html.mk
