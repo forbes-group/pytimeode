@@ -13,8 +13,7 @@ things:
 """
 from __future__ import division
 
-__all__ = ['EvolverABM', 'EvolverSplit',
-           'fft', 'ifft', 'fftn', 'ifftn']
+__all__ = ['EvolverABM', 'EvolverSplit']
 
 from math import sqrt
 
@@ -22,7 +21,6 @@ import numpy as np
 
 from . import interfaces
 from .utils import numexpr, Object
-from .utils.fft import fft, ifft, fftn, ifftn
 from .utils import interface, expr
 
 if numexpr:
@@ -43,7 +41,7 @@ class EvolverBase(Object):
     """
     interface.implements(interfaces.IEvolver)
 
-    def __init__(self, y, dt, t=0.0, normalize=False):
+    def __init__(self, y, dt, t=0.0, normalize=False, copy=True):
         r"""
         Parameter
         ---------
@@ -60,8 +58,10 @@ class EvolverBase(Object):
            also be implemented in the states `compute_dy` method as a
            constraint on fixed particle number by making `dy` and `y`
            orthogonal, so this is an optional feature.
+        copy : bool
+           If `True`, then first make a copy of the state.
         """
-        self.y = y
+        self.y = y.copy() if copy else y
         self.t = t
         self.dt = dt
         self.normalize = normalize
@@ -74,21 +74,19 @@ class EvolverBase(Object):
         Object.__init__(self)
 
     def init(self):
-        self.y.update(t=self.t)
+        self.y.t = self.t
 
     ######################################################################
     # Defaults:  Subclasses may want to overload these for performance.
     def get_dy(self, y=None, t=None, omega=None):
-        r"""Return the `y'=dy/dt` (without :attr:`mu`).  This is used by ABM
-        evolvers (not split operator)."""
+        r"""Return the `y'=dy/dt`.  This is used by ABM evolvers."""
         if t is None:
             t = self.t
         if y is None:
             y = self.get_y()
 
-        y.update(t=t)
-        dy = y.copy()
-        dy.compute_dy_inplace(potentials=y.potentials)
+        with y.lock:
+            dy = y.compute_dy(t=t)
         return dy
 
     def evolve(self, steps=None, omega=None):
@@ -103,7 +101,7 @@ class EvolverBase(Object):
 
         self.do_step(final=True)
         assert np.allclose(self.t, t0 + steps * self.dt)
-        self.y.update(t=self.t)
+        self.y.t = self.t
 
 
 class EvolverSplit(EvolverBase):
@@ -124,9 +122,9 @@ class EvolverSplit(EvolverBase):
     Note that we need to include a factor of `degen` for the potential piece
     (this is already included in the kinetic pieces).
     """
-    def __init__(self, y, dt, t=0.0, **kw):
+    def __init__(self, y, dt, t=0.0, copy=True, **kw):
         interface.verifyObject(interfaces.IStateForSplitEvolvers, y)
-        EvolverBase.__init__(self, y=y, dt=dt, t=t, **kw)
+        EvolverBase.__init__(self, y=y, dt=dt, t=t, copy=copy, **kw)
 
     def init(self):
         EvolverBase.init(self)
@@ -152,7 +150,7 @@ class EvolverSplit(EvolverBase):
 
         if first:
             # First step with half of the kinetic energy
-            y.apply_exp_K(dt=dt/2)
+            y.apply_exp_K(dt=dt/2, t=t)
             t += 0.5*dt
 
         # Here is the application of the potential.  We first take a full step
@@ -160,23 +158,21 @@ class EvolverSplit(EvolverBase):
         # correct.
 
         # Compute and store V(t)
-        y.update(t=t)
-        V0 = y.potentials.copy()
+        V0 = y.get_potentials(t=t)
 
-        y.apply_exp_V(dt=dt, potentials=V0)    # full step with V(t)
+        y.apply_exp_V(dt=dt, t=t, potentials=V0)    # full step with V(t)
         # Compute and store V(t+dt)
-        y.update(t=t+dt)
-        V1 = y.potentials
+        V1 = y.get_potentials(t=t+dt)
 
         # Correct step
-        y.apply_exp_V(dt=dt, potentials=0.5*(V1 - V0))
+        y.apply_exp_V(dt=dt, t=t, potentials=0.5*(V1 - V0))
 
         if final:
             # Only half of K at the end
-            y.apply_exp_K(dt=dt/2)
+            y.apply_exp_K(dt=dt/2, t=t)
             t += 0.5*dt
         else:
-            y.apply_exp_K(dt=dt)
+            y.apply_exp_K(dt=dt, t=t)
             t += dt
 
         if self.normalize:
@@ -185,6 +181,7 @@ class EvolverSplit(EvolverBase):
         # This should be a float, not a view of an array otherwise one might
         # accumulate a bunch of times that are all the same since they refer to
         # the same array.
+        y.t = t
         self.t = float(t)
 
     def do_step2(self, first=None, final=None):
@@ -192,27 +189,25 @@ class EvolverSplit(EvolverBase):
         dt = self.dt
         y = self.y
 
-        y.update(t=t)
-        V0 = y.potentials.copy()
+        V0 = y.get_potentials(t=t)
 
         # First step with half of the kinetic energy
-        y.apply_exp_K(dt=dt/2)
+        y.apply_exp_K(dt=dt/2, t=t)
         y1 = y.copy()
-        y1.apply_exp_V(dt=dt, potentials=V0)    # full step with V(t)
-        y1.apply_exp_K(dt=dt/2)
-        y1.update(t=t+dt)
-        V1 = y1.potentials
+        y1.apply_exp_V(dt=dt, t=t, potentials=V0)    # full step with V(t)
+        y1.apply_exp_K(dt=dt/2, t=t)
+        V1 = y1.get_potentials(t+dt)
         del y1
 
         # Correct step
-        y.apply_exp_V(dt=dt, potentials=0.5*(V1 + V0))
-        y.apply_exp_K(dt=dt/2)
+        y.apply_exp_V(dt=dt, t=t, potentials=0.5*(V1 + V0))
+        y.apply_exp_K(dt=dt/2, t=t)
 
         if self.normalize:
             y.normalize()
 
         t += dt
-
+        y.t = t
         self.t = float(t)
 
     do_step = do_step1
@@ -328,13 +323,8 @@ class EvolverABM(EvolverBase):
 
     def _get_dy(self, y, t, dy=None):
         r"""Helper to compute `y'`."""
-        if dy is None:
-            dy = y.copy()
-        else:
-            dy.copy_from(y)
-        dy.update(t=t)
-        dy.compute_dy_inplace()
-
+        with y.lock:
+            dy = y.compute_dy(t=t, dy=dy)
         return dy
 
     def do_step_runge_kutta(self):

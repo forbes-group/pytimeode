@@ -51,19 +51,20 @@ class State(interfaces.StateMixin):
         self.data *= f
         self.data.dtype = float
 
-    def update(self, t=0, mu=None):
+    def apply_V(self, t):
         assert self.writeable
-        self.t = t
-
-    def apply_V(self, v=None):
-        assert self.writeable
-        v_ext = -2.0*(self.t - 1.0)
+        v_ext = -2.0*(t - 1.0)
         self.data *= v_ext
 
-    def compute_dy_inplace(self, potentials=None):
-        assert self.writeable
-        self.apply_V()
-        self *= -1j
+    def compute_dy(self, t, dy=None, potentials=None):
+        if dy is None:
+            dy = self.copy()
+        elif dy is not self:
+            dy.copy_from(self)
+
+        dy.apply_V(t=t)
+        dy *= -1j
+        return dy
 
     def __repr__(self):
         return "State(t=%g, data=%s)" % (self.t, repr(self.data))

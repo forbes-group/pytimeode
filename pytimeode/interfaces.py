@@ -7,6 +7,7 @@ At the top level, one probably wants to use the tested evolvers in
 If you want to reuse other components like bases, then you will need to
 implement the additional interfaces define here.  Here is the dependency graph.
 """
+import contextlib
 
 import numpy as np
 from .utils.interface import (Interface, Attribute, implements,
@@ -17,14 +18,12 @@ class IEvolver(Interface):
     """General interface for evolvers"""
     """Requires:
 
-    y.update(t)
-
     # Split Operator uses
     y.apply_exp_K(dt)
     y.apply_exp_V(dt, potentials)
     y.copy()
     y.copy_from(y)
-    y.compute_dy_inplace(potentials)
+    y.compute_dy()
     y.axpy(x, a)
     y.scale(self, f)
 
@@ -44,7 +43,7 @@ class IEvolver(Interface):
     y = Attribute("y", "Current state")
     t = Attribute("t", "Current time")
 
-    def __init__(y, dt, t=0.0):
+    def __init__(y, dt, t=0.0, copy=True):
         """Return an evolver starting with state `y` at time `t` and evolve
         with step `dt`."""
 
@@ -55,15 +54,6 @@ class IEvolver(Interface):
 class IStateMinimal(Interface):
     """Minimal interface required for state objects.  This will not satisfy all
     uses of a state."""
-
-    # For self-consistent problems such as a DFT, the state must keep track of
-    # the current set of self-consistent potentials.  These are computed by
-    # `update()`.  The potentials must act like arrays or numbers (i.e. they
-    # must support addition, scaling, and copying).
-    potentials = Attribute("potentials",
-                           """Array-like object for representing the current
-                           potentials.""")
-
     writeable = Attribute("writeable",
                           """Set to `True` if the state is writeable, or
                           `False` if the state should only be read.""")
@@ -73,14 +63,13 @@ class IStateMinimal(Interface):
                       real, then it is assumed that the states will always be
                       real and certain optimizations may take place.""")
 
+    t = Attribute("t", """Time at which state is valid.""")
+
     def copy():
         """Return a copy of the state."""
 
     def copy_from(y):
         """Set this state to be a copy of the state `y`"""
-
-    def update(t=0):
-        """Set the time to be "t" and compute `self.potentials`."""
 
     def axpy(x, a=1):
         """Perform `self += a*x` as efficiently as possible."""
@@ -91,14 +80,6 @@ class IStateMinimal(Interface):
     # Note: we could get away with __imul__ but it requires one return self
     # which can be a little confusing, so we allow the user to simply define
     # `axpy` and `scale` instead.
-
-    def apply(expr, **kwargs):
-        """Evaluate the expression using the arguments in ``kwargs`` and store
-        the result in ``self``.  For those instance of the class in ``kwargs``,
-        the expression must be applied over all components.  This is used by
-        the ``utils.expr.Expression`` class to allow numexpr expressions to be
-        applied to custom state objects.
-        """
 
 
 class IState(IStateMinimal):
@@ -140,20 +121,47 @@ class IState(IStateMinimal):
     def __div__(f):
         """Return `self / y`"""
 
+    def apply(expr, **kwargs):
+        """Evaluate the expression using the arguments in ``kwargs`` and store
+        the result in ``self``.  For those instance of the class in ``kwargs``,
+        the expression must be applied over all components.  This is used by
+        the ``utils.expr.Expression`` class to allow numexpr expressions to be
+        applied to custom state objects.
+        """
+
 
 class IStateForABMEvolvers(IState):
-    """Interface required by ABM and similar integration based evolvers."""
-    def compute_dy_inplace(potentials=None):
-        """Compute `dy` in place using the specified potentials (or
-        `self.potentials`."""
+    """Interface required by ABM and similar integration based evolvers.
+
+    These evolvers are very general, requiring only the ability for the problem
+    to compute $dy/dt$.
+    """
+    def compute_dy(y, t, dy=None):
+        """Return `dy/dt` at time `t`.
+
+        If `dy` is provided, then use it for the result, otherwise return a new
+        state.
+        """
 
 
 class IStateForSplitEvolvers(IState):
-    """Interface required by Split Operator evolvers."""
-    def apply_exp_K(dt):
+    r"""Interface required by Split Operator evolvers.
+
+    These evolvers assume the problem can be split into two operators - $K$
+    (kinetic energy) and $V$ (potential energy) so that $i dy/dt = (K+V)y$.
+    The method requires that each of these operators be exponentiated.  The
+    approach uses a Trotter decomposition that provides higher order accuracy,
+    but requires evaluation of the potentials at an intermediate time.  The
+    ``get_potentials()`` method must therefore be able to compute the
+    potentials at a specified time which might lie at a half-step.
+    """
+    def get_potentials(t):
+        """Return `potentials` at time `t`."""
+
+    def apply_exp_K(dt, t=None):
         r"""Apply $e^{i K dt}$"""
 
-    def apply_exp_V(dt, potentials=None):
+    def apply_exp_V(dt, t=None, potentials=None):
         r"""Apply $e^{i V dt}$`"""
 
 
@@ -238,17 +246,17 @@ class StateMixin(object):
         """Return the list of quantum numbers.
 
         This default version assumes that there is only once quantum number and
-        that the corresponding array is self.y.
+        that the corresponding array is self.data.
         """
         return [0].__iter__()
 
     def __getitem__(self, key):
         """Return the array associated with the specified quantum number.
 
-        This default version assumes that there is only one array `self.y`.
+        This default version assumes that there is only one array `self.data`.
         """
         assert key == 0
-        return self.y
+        return self.data
 
     @property
     def dtype(self):
@@ -264,3 +272,80 @@ class StateMixin(object):
                     kw[_k] = kw[_k][l]
 
             expr(out=self[l], **kw)
+
+    @property
+    @contextlib.contextmanager
+    def lock(self):
+        writeable = self.writeable
+        self.writeable = False
+        try:
+            yield
+        finally:
+            self.writeable = writeable
+
+
+class ArrayStateMixin(StateMixin):
+    """Mixin providing support for states with a single data array.
+
+    Assumes that the data is an array-like object called `self.data`.
+    """
+    t = 0.0
+    data = None
+    potentials = None
+
+    @property
+    def writeable(self):
+        """Set to `True` if the state is writeable, or `False` if the state
+        should only be read.
+        """
+        return self.data.flags.writeable
+
+    @writeable.setter
+    def writeable(self, value):
+        self.data.flags.writeable = value
+
+    @property
+    def dtype(self):
+        """Return the dtype of the underlying state.  If this is real, then it
+        is assumed that the states will always be real and certain
+        optimizations may take place.
+        """
+        return self.data.dtype
+
+    def copy(self, y=None):
+        """Return a copy of the state.
+
+        Subclasses can override this to initialize a different `y` object.
+        """
+        if y is None:
+            y = self.__class__()
+        y.data = self.data.copy()
+        y.t = self.t
+        if self.potentials is not None:
+            y.potentials = self.potentials.copy()
+        return y
+
+    def copy_from(self, y):
+        """Set this state to be a copy of the state `y`"""
+        assert self.writeable
+        self.t = y.t
+        self.data[...] = y.data
+        if y.potentials is not None:
+            self.potentials[...] = y.potentials
+
+    def axpy(self, x, a=1):
+        """Perform `self += a*x` as efficiently as possible."""
+        assert self.writeable
+        self.data += a*x.data
+
+    def scale(self, f):
+        """Perform `self *= f` as efficiently as possible."""
+        assert self.writeable
+        self.data *= f
+
+    # Note: we could get away with __imul__ but it requires one return self
+    # which can be a little confusing, so we allow the user to simply define
+    # `axpy` and `scale` instead.
+
+    def __repr__(self):
+        return repr(self.data)
