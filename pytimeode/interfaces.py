@@ -349,3 +349,8 @@ class ArrayStateMixin(StateMixin):
 
     def __repr__(self):
         return repr(self.data)
+
+    @property
+    def __array_interface__(self):
+        """Allows states to act as arrays with ``np.asarray(state)``."""
+        return self.data.__array_interface__
