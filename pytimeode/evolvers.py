@@ -268,8 +268,8 @@ class EvolverABM(EvolverBase):
         # and 4 copies for dy = -1j*H*y
         if self.no_runge_kutta:
             self.ys = [_y.copy() for _y in [y0] * 2]
-            self.dcps = [161/170*0*_y for _y in [y0] * 2]
-            self.dys = [0*_y for _y in [y0]*4]
+            self.dcps = [_y*(161/170*0) for _y in [y0] * 2]
+            self.dys = [_y*0 for _y in [y0]*4]
         else:
             self.ys = [y0]
             self.dcps = [161/170*0*y0]
@@ -345,10 +345,14 @@ class EvolverABM(EvolverBase):
         else:
             dy = self.dys[0]
 
-        k[0] = h * dy
-        k[1] = h * (self._get_dy(y + k[0]/2., t=t + h/2.))
-        k[2] = h * (self._get_dy(y + k[1]/2., t=t + h/2.))
-        k[3] = h * (self._get_dy(y + k[2],    t=t + h))
+        # h might be an array so multiply this on the right so dy does not get
+        # converted to an array (a problem for dy which support
+        # __array_interface__)
+
+        k[0] = dy * h
+        k[1] = (self._get_dy(y + k[0]/2., t=t + h/2.)) * h
+        k[2] = (self._get_dy(y + k[1]/2., t=t + h/2.)) * h
+        k[3] = (self._get_dy(y + k[2],    t=t + h)) * h
         y += (k[0] + 2*k[1] + 2*k[2] + k[3])/6.0
 
         if self.normalize:
