@@ -159,10 +159,10 @@ class IStateForSplitEvolvers(IState):
         """Return `potentials` at time `t`."""
 
     def apply_exp_K(dt, t=None):
-        r"""Apply $e^{i K dt}$"""
+        r"""Apply $e^{i K dt}$ in place"""
 
     def apply_exp_V(dt, t=None, potentials=None):
-        r"""Apply $e^{i V dt}$`"""
+        r"""Apply $e^{i V dt}$ in place"""
 
 
 class IStateWithNormalize(IState):

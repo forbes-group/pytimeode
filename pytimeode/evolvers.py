@@ -94,6 +94,8 @@ class EvolverBase(Object):
         t0 = self.t
         assert steps > 1
 
+        getattr(self.y, 'pre_evolve_hook', lambda: None)()
+
         self.do_step(first=True)
 
         for kt in xrange(1, steps-1):
@@ -102,6 +104,8 @@ class EvolverBase(Object):
         self.do_step(final=True)
         assert np.allclose(self.t, t0 + steps * self.dt)
         self.y.t = self.t
+
+        getattr(self.y, 'post_evolve_hook', lambda: None)()
 
 
 class EvolverSplit(EvolverBase):
