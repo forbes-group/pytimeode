@@ -14,17 +14,11 @@ Currently the codes only use fixed time-step method (not adaptive).
   https://bitbucket.org/mforbes/pytimeode/issues
 """
 import sys
-import subprocess
 
 from setuptools import setup, find_packages
 from setuptools.command.test import test as original_test
 
 NAME = "pytimeode"
-
-HG_VERSION = subprocess.check_output(['hg', 'id', '-q']).strip()
-HG_LOCAL_VERSION = subprocess.check_output(['hg', 'id', '-n'])[1:].strip()
-VERSION = "0.1.dev{}".format(HG_LOCAL_VERSION)
-
 
 # Remove NAME from sys.modules so that it gets covered in tests. See
 # http://stackoverflow.com/questions/11279096
@@ -53,7 +47,7 @@ class test(original_test):
                     raise
 
 setup(name=NAME,
-      version=VERSION,
+      version=0.2,
       packages=find_packages(exclude=['tests']),
       cmdclass=dict(test=test),
 
