@@ -15,16 +15,13 @@ from __future__ import division
 
 __all__ = ['EvolverABM', 'EvolverSplit']
 
-from math import sqrt
-
 import numpy as np
+
+from mmfutils import interface
 
 from . import interfaces
 from .utils import numexpr, Object
-from .utils import interface, expr
-
-if numexpr:
-    import sympy
+from .utils import expr
 
 
 ######################################################################

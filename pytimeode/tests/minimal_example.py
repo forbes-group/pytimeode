@@ -14,9 +14,9 @@ This corresponds to evolution with potential $V = -2(t-1)$
 from __future__ import division
 
 import numpy as np
+from mmfutils import interface
 
 from .. import interfaces
-from ..utils import interface
 
 
 class State(interfaces.StateMixin):

@@ -4,14 +4,10 @@ __all__ = [
     'Object', 'numexpr',
 ]
 
-import math
-import warnings
-
 import numpy as np
 
 _EPS = np.finfo(float).eps
 
-import monkeypatch
 
 numexpr = False
 try:
@@ -22,9 +18,11 @@ try:
     # a library error.  We test this in a separate process and if it fails, we
     # disable the MKL.
     import multiprocessing
+
     def check(q):
         import numexpr
         q.put(numexpr.get_vml_version())
+
     q = multiprocessing.Queue()
     _p = multiprocessing.Process(target=check, args=[q])
     _p.start()
@@ -47,11 +45,12 @@ class Object(object):
     which will be called at the end of `__init__`.
 
     This aids pickling which will save only those variables defined when the
-    base `__init__` is finished, and will call `init()` upon unpickling, thereby
-    allowing unpicklable objects to be used (in particular function instances).
+    base `__init__` is finished, and will call `init()` upon unpickling,
+    thereby allowing unpicklable objects to be used (in particular function
+    instances).
 
-    .. note:: Do not use a variable named `_empty_state`... this is reserved for
-       objects without any state.
+    .. note:: Do not use a variable named `_empty_state`... this is reserved
+       for objects without any state.
     """
     def __init__(self):
         self.picklable_attributes = [_k for _k in self.__dict__]

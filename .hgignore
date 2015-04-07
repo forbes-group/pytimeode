@@ -1,8 +1,11 @@
-_build
+syntax: glob
+
+build
 _trash
 .ipynb_checkpoints
 .coverage
+.eggs
+pytimeode.egg-info
 
-syntax: glob
 *.pyc
 *.pyo

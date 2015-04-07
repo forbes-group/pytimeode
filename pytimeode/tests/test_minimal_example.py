@@ -15,5 +15,5 @@ class Test(object):
         y0 = minimal_example.State()
         e = EvolverABM(y=y0, dt=0.01, t=y0.t)
         e.evolve(steps=100)
-        y = (e.y.data, self.y(t=e.t))
+        # y = (e.y.data, self.y(t=e.t))
         assert np.allclose(e.y.data, self.y(t=e.t))

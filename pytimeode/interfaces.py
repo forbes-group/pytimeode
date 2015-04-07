@@ -9,9 +9,7 @@ implement the additional interfaces define here.  Here is the dependency graph.
 """
 import contextlib
 
-import numpy as np
-from .utils.interface import (Interface, Attribute, implements,
-                              verifyObject, verifyClass)
+from mmfutils.interface import (Interface, Attribute)
 
 
 class IEvolver(Interface):
