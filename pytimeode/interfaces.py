@@ -11,6 +11,10 @@ import contextlib
 
 from mmfutils.interface import (Interface, Attribute)
 
+__all__ = ['IEvolver', 'IStateMinimal', 'IState',
+           'IStateForABMEvolvers', 'IStateForSplitEvolvers',
+           'IStateWithNormalize', 'StateMixin', 'ArrayStateMixin']
+
 
 class IEvolver(Interface):
     """General interface for evolvers"""
@@ -134,7 +138,7 @@ class IStateForABMEvolvers(IState):
     These evolvers are very general, requiring only the ability for the problem
     to compute $dy/dt$.
     """
-    def compute_dy(y, t, dy=None):
+    def compute_dy(t, dy=None):
         """Return `dy/dt` at time `t`.
 
         If `dy` is provided, then use it for the result, otherwise return a new
@@ -285,7 +289,14 @@ class StateMixin(object):
 class ArrayStateMixin(StateMixin):
     """Mixin providing support for states with a single data array.
 
-    Assumes that the data is an array-like object called `self.data`.
+    Assumes that the data is an array-like object called `self.data`.  This
+    provides all the functionality required by IState.  All the user needs to
+    provide are the methods for the required `IStateFor...Evolvers`.
+
+    Note: The `copy()` implementation requires a default constructor and
+    assumes that the only data attributes are `t`, `data`, and `potentials`.
+    If you have a more complicated object, override the `copy()` and
+    `copy_from()` methods.
     """
     t = 0.0
     data = None
