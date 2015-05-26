@@ -1,0 +1,2 @@
+--extra-index-url http://mforbes.bitbucket.org/mypi/index/
+-e .

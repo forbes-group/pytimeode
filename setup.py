@@ -46,21 +46,28 @@ class test(original_test):
                 if e.code:
                     raise
 
+install_requires = [
+    'mmfutils>=0.4.3',
+    'persist>=0.9b2',
+    'zope.interface>=3.8.0'
+]
+
+test_requires = [
+    'nose>=1.3.6',
+    'coverage',
+    'flake8',
+    'pep8==1.5.7',     # Needed by flake8: dependency resolution issue if not pinned
+]
+
 setup(name=NAME,
       version=0.2,
       packages=find_packages(exclude=['tests']),
       cmdclass=dict(test=test),
 
-      install_requires=[
-          'mmfutils>=0.2'
-      ],
-
+      install_requires=install_requires,
+      tests_require=test_requires,
       extras_require={},
-
-      setup_requires=[
-          'nose>=1.3',
-          'coverage',
-          'flake8'],
+      setup_requires=[],
 
       dependency_links=[
           'hg+https://bitbucket.org/mforbes/mmfutils@0.2#egg=mmfutils-0.2',
