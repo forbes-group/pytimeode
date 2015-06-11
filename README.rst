@@ -65,13 +65,18 @@ evolvers the ability to manipulate your state, making copies, scaling
 the state, etc. Addional require functionality by the ``IState``
 interface can be obtained from these by inheriting from ``StateMixin``
 (though you might eventually like to provide custom implementations of
-the ``IState`` interface for performance.)
+the ``IState`` interface for performance.) A variety of other mixins are
+provided for implementing states from a numpy arrays
+(``ArrayStateMixin``), a Mapping or Sequence of data (``StatesMixin``),
+a Mapping or Sequence of arrays (``ArraysStateMixin``), or a Mapping or
+Sequence of other states (``MultiStateMixin``).
 
 .. code:: python
 
     from nbutils import describe_interface
     import pytimeode.interfaces
     describe_interface(pytimeode.interfaces.IStateMinimal)
+
 
 
 .. raw:: html
@@ -102,7 +107,7 @@ the ``IState`` interface for performance.)
     <p>Methods:</p>
     <blockquote>
     <p><tt class="docutils literal">axpy(x, a=1)</tt> -- Perform <cite>self += a*x</cite> as efficiently as possible.</p>
-    <p><tt class="docutils literal">copy()</tt> -- Return a copy of the state.</p>
+    <p><tt class="docutils literal">copy()</tt> -- Return a writeable copy of the state.</p>
     <p><tt class="docutils literal">copy_from(y)</tt> -- Set this state to be a copy of the state <cite>y</cite></p>
     <p><tt class="docutils literal">scale(f)</tt> -- Perform <cite>self *= f</cite> as efficiently as possible.</p>
     </blockquote>
@@ -120,6 +125,7 @@ Currently we support the following solvers.
 .. code:: python
 
     describe_interface(pytimeode.interfaces.IStateForABMEvolvers)
+
 
 
 .. raw:: html
@@ -143,10 +149,9 @@ Currently we support the following solvers.
     <p>This interface extends:</p>
     <blockquote>
     o <tt class="docutils literal">IState</tt></blockquote>
-    <p>Attributes:</p>
     <p>Methods:</p>
     <blockquote>
-    <p><tt class="docutils literal">compute_dy(y, t, dy=None)</tt> -- Return <cite>dy/dt</cite> at time <cite>t</cite>.</p>
+    <p><tt class="docutils literal">compute_dy(t, dy=None)</tt> -- Return <cite>dy/dt</cite> at time <cite>t</cite>.</p>
     <blockquote>
     If <cite>dy</cite> is provided, then use it for the result, otherwise return a new
     state.</blockquote>
@@ -162,6 +167,7 @@ Currently we support the following solvers.
 .. code:: python
 
     describe_interface(pytimeode.interfaces.IStateForSplitEvolvers)
+
 
 
 .. raw:: html
@@ -190,11 +196,10 @@ Currently we support the following solvers.
     <p>This interface extends:</p>
     <blockquote>
     o <tt class="docutils literal">IState</tt></blockquote>
-    <p>Attributes:</p>
     <p>Methods:</p>
     <blockquote>
-    <p><tt class="docutils literal">apply_exp_K(dt, t=None)</tt> -- Apply $e^{i K dt}$</p>
-    <p><tt class="docutils literal">apply_exp_V(dt, t=None, potentials=None)</tt> -- Apply $e^{i V dt}$`</p>
+    <p><tt class="docutils literal">apply_exp_K(dt, t=None)</tt> -- Apply $e^{i K dt}$ in place</p>
+    <p><tt class="docutils literal">apply_exp_V(dt, t=None, potentials=None)</tt> -- Apply $e^{i V dt}$ in place</p>
     <p><tt class="docutils literal">get_potentials(t)</tt> -- Return <cite>potentials</cite> at time <cite>t</cite>.</p>
     </blockquote>
     </blockquote>

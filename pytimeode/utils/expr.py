@@ -27,6 +27,15 @@ class Expression(object):
     * Do not use the following names for arguments or variables:
       `I`, `_onejay`, `out`
 
+    Examples
+    --------
+    >>> np.random.seed(2)
+    >>> a = np.random.rand(10)
+    >>> expr = Expression('sin(a**3)', ['a'], dtype=a.dtype)
+    >>> res = np.empty(a.shape, dtype=a.dtype)
+    >>> res = expr(out=res, a=a)
+    >>> np.allclose(res, np.sin(a**3))
+    True
     """
 
     # Dictionary mapping numpy dtypes to numexpr kinds:
