@@ -60,7 +60,7 @@ test_requires = [
 ]
 
 setup(name=NAME,
-      version='0.3dev',
+      version='0.3',
       packages=find_packages(exclude=['tests']),
       cmdclass=dict(test=test),
 
