@@ -1,2 +1,2 @@
---find-links https://bitbucket.org/mforbes/mypi/README.rst
+--find-links https://bitbucket.org/mforbes/mypi/
 -e .

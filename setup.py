@@ -76,8 +76,8 @@ setup(name=NAME,
       # Metadata
       author='Michael McNeil Forbes',
       author_email='michael.forbes+bitbucket@gmail.com',
-      url='https://bitbucket.org/mforbes/research-coupled_bec',
-      description="Superfluid dynamics in coupled BECs",
+      url='https://bitbucket.org/mforbes/pytimeode',
+      description="Dynamical evolution of complex systems.",
       long_description=__doc__,
       license='BSD',
 
