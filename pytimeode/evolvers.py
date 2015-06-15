@@ -68,6 +68,12 @@ class EvolverBase(Object):
                     "Can only set normalize=True if state y implements " +
                     "IStateWithNormalize")
 
+        if interfaces.INumexpr.providedBy(y):
+            interface.verifyObject(interfaces.INumexpr, y)
+            self.numexpr = numexpr
+        else:
+            self.numexpr = None
+
         Object.__init__(self)
 
     def init(self):
@@ -283,25 +289,23 @@ class EvolverABM(EvolverBase):
         self._am = _tmp * (17)
         self._ac = _tmp * np.array([-68, 102, -68, 17], dtype=float)
 
-        if numexpr:
+        if self.numexpr:
             # Use sympy to simplify the expressions
             constants = dict(h=h)
             m = '((y0+y1)/2 + h/48*(119*dy0-99*dy1+69*dy2-17*dy3) + dcp0)'
             dcp = 'h*161/48/170*(17*dm-68*dy0+102*dy1-68*dy2+17*dy3)'
             self._expr_m = expr.Expression(
-                m, constants=constants, sig=dict(
-                    (_n, y0.dtype) for _n in
-                    ['y0', 'y1', 'dy0', 'dy1', 'dy2', 'dy3', 'dcp0']),
+                m, constants=constants, state=y0,
+                args=['y0', 'y1', 'dy0', 'dy1', 'dy2', 'dy3', 'dcp0'],
                 ex_uses_vml=False)
             self._expr_dcp = expr.Expression(
-                dcp, constants=constants, sig=dict(
-                    (_n, y0.dtype) for _n in
-                    ['dm', 'dy0', 'dy1', 'dy2', 'dy3']),
+                dcp, constants=constants, state=y0,
+                args=['dm', 'dy0', 'dy1', 'dy2', 'dy3'],
                 ex_uses_vml=False)
 
             self._expr_y = expr.Expression(
-                'm + dcp - dcp0', constants=constants, sig=dict(
-                    (_n, y0.dtype) for _n in ['m', 'dcp', 'dcp0']),
+                'm + dcp - dcp0', constants=constants, state=y0,
+                args=['m', 'dcp', 'dcp0'],
                 ex_uses_vml=False)
 
             # Until issue 93 makes it into a release, we will not use the same
@@ -410,7 +414,7 @@ class EvolverABM(EvolverBase):
 
     def do_step_ABM_numexpr(self):
         r"""Perform one step of the ABM method.  This version uses numexpr."""
-        if not numexpr:
+        if not self.numexpr:
             return self.do_step_ABM()
 
         t = self.t
