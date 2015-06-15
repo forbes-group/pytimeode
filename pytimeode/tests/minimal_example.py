@@ -13,6 +13,8 @@ This corresponds to evolution with potential $V = -2(t-1)$
 """
 from __future__ import division
 
+import copy
+
 import numpy as np
 from mmfutils import interface
 
@@ -29,16 +31,17 @@ class State(interfaces.StateMixin):
         """Not part of the interface"""
         self.t = float(t)
         self.data = np.array(data, dtype=float).reshape((2,))
-
-    def __getitem__(self, key=None):
-        return self.data
+        self.dtype = float
 
     def copy(self):
-        return State(t=self.t, data=self.data)
+        y = copy.copy(self)
+        y.writeable = True      # Copies should be writable
+        y.data = self.data.copy()
+        return y
 
     def copy_from(self, y):
         assert self.writeable
-        self.data = np.array(y.data)
+        self.data[...] = y.data
         self.t = float(y.t)
 
     def axpy(self, x, a=1):
@@ -70,4 +73,21 @@ class State(interfaces.StateMixin):
         return "State(t=%g, data=%s)" % (self.t, repr(self.data))
 
 
+class StateNumexpr(State):
+    """Provides apply so we can use numexpr"""
+    interface.implements(interfaces.INumexpr)
+
+    def apply(self, expr, **kw):
+        # Need to pass arrays to expr, not the states.
+        for k in kw:
+            if isinstance(kw[k], State):
+                kw[k] = kw[k].data
+        expr(out=self.data, **kw)
+
 interface.verifyClass(interfaces.IStateForABMEvolvers, State)
+interface.verifyClass(interfaces.IStateForABMEvolvers, StateNumexpr)
+interface.verifyClass(interfaces.INumexpr, StateNumexpr)
+
+interface.verifyObject(interfaces.IStateForABMEvolvers, State())
+interface.verifyObject(interfaces.IStateForABMEvolvers, StateNumexpr())
+interface.verifyObject(interfaces.INumexpr, StateNumexpr())

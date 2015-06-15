@@ -7,13 +7,19 @@ At the top level, one probably wants to use the tested evolvers in
 If you want to reuse other components like bases, then you will need to
 implement the additional interfaces define here.  Here is the dependency graph.
 """
+import collections
 import contextlib
+import copy
 
-from mmfutils.interface import (Interface, Attribute)
+import numpy as np
 
-__all__ = ['IEvolver', 'IStateMinimal', 'IState',
+from mmfutils.interface import (implements, Interface, Attribute)
+
+__all__ = ['IEvolver', 'IStateMinimal', 'IState', 'INumexpr',
            'IStateForABMEvolvers', 'IStateForSplitEvolvers',
-           'IStateWithNormalize', 'StateMixin', 'ArrayStateMixin']
+           'IStateWithNormalize',
+           'StateMixin', 'ArrayStateMixin', 'ArraysStateMixin',
+           'MultiStateMixin']
 
 
 class IEvolver(Interface):
@@ -68,7 +74,7 @@ class IStateMinimal(Interface):
     t = Attribute("t", """Time at which state is valid.""")
 
     def copy():
-        """Return a copy of the state."""
+        """Return a writeable copy of the state."""
 
     def copy_from(y):
         """Set this state to be a copy of the state `y`"""
@@ -90,6 +96,12 @@ class IState(IStateMinimal):
     Many of these functions are for convenience, and can be implemented from
     those defined in ``IState`` by including the ``StateMixin`` mixin.
     """
+    def __pos__():
+        """`+self`"""
+
+    def __neg__():
+        """`-self`"""
+
     def __imul__(f):
         """`self *= f`"""
 
@@ -122,6 +134,14 @@ class IState(IStateMinimal):
 
     def __div__(f):
         """Return `self / y`"""
+
+
+class INumexpr(Interface):
+    """Allows for numexpr optimizations"""
+    dtype = Attribute("dtype",
+                      """Return the dtype of the underlying state.  If this is
+                      real, then it is assumed that the states will always be
+                      real and certain optimizations may take place.""")
 
     def apply(expr, **kwargs):
         """Evaluate the expression using the arguments in ``kwargs`` and store
@@ -181,7 +201,7 @@ class IStateWithNormalize(IState):
 
 
 ######################################################################
-# Defaults
+# Default Mixins
 #
 # These mixins implement many of the required operations using only the
 # methods required by the Minimal interfaces
@@ -190,6 +210,14 @@ class StateMixin(object):
     # Note: we could get away with __imul__ but it requires one return self
     # which can be a little confusing, so we allow the user to simply define
     # `axpy` and `scale` instead.
+    def __pos__(self):
+        """`+self`"""
+        return self
+
+    def __neg__(self):
+        """`-self`"""
+        return -1*self
+
     def __imul__(self, f):
         """`self *= f`"""
         self.scale(f)
@@ -209,7 +237,7 @@ class StateMixin(object):
 
     def __itruediv__(self, f):
         """`self /= f`"""
-        self *= (1./f)
+        self.scale(1./f)
         return self
 
     __idiv__ = __itruediv__
@@ -231,7 +259,7 @@ class StateMixin(object):
     def __mul__(self, f):
         """Return `self * y`"""
         res = self.copy()
-        res *= f
+        res.scale(f)
         return res
 
     __rmul__ = __mul__
@@ -239,41 +267,10 @@ class StateMixin(object):
     def __truediv__(self, f):
         """Return `self / y`"""
         res = self.copy()
-        res *= (1./f)
+        res.scale(1./f)
         return res
 
     __div__ = __truediv__
-
-    def __iter__(self):
-        """Return the list of quantum numbers.
-
-        This default version assumes that there is only once quantum number and
-        that the corresponding array is self.data.
-        """
-        return [0].__iter__()
-
-    def __getitem__(self, key):
-        """Return the array associated with the specified quantum number.
-
-        This default version assumes that there is only one array `self.data`.
-        """
-        assert key == 0
-        return self.data
-
-    @property
-    def dtype(self):
-        for _l in self:
-            return self[_l].dtype
-
-    def apply(self, expr, **kwargs):
-        for l in self:
-            kw = {}
-            for _k in kwargs:
-                kw[_k] = kwargs[_k]
-                if isinstance(kw[_k], self.__class__):
-                    kw[_k] = kw[_k][l]
-
-            expr(out=self[l], **kw)
 
     @property
     @contextlib.contextmanager
@@ -286,18 +283,94 @@ class StateMixin(object):
             self.writeable = writeable
 
 
+class StatesMixin(object):
+    """Mixin for states with a collection (Sequence or Mapping) of data.
+
+    The general interface is provided through the ``__iter__()`` and
+    ``__getitem__()`` methods which are assumed to give complete access to the
+    data through objects with behave like arrays (i.e. support arithmetic,
+    assignment with ``x[...] = y``, and a ``flags.writeable`` attribute.)
+    """
+    implements([INumexpr])
+    data = None
+
+    def __len__(self):
+        return len(list(self))
+
+    def apply(self, expr, **kwargs):
+        for _l in self:
+            kw = {}
+            for _k in kwargs:
+                kw[_k] = kwargs[_k]
+                if isinstance(kw[_k], self.__class__):
+                    kw[_k] = kw[_k][_l]
+
+            expr(out=self[_l], **kw)
+
+    ######################################################################
+    # Requires these methods
+    #
+    # These default implementations assume self.data is a Sequence of Mapping,
+    # but can be overridden to support custom objects.
+    def __iter__(self):
+        """Return the list of quantum numbers.
+
+        This version assumes `self.data` is either a Sequence or a Mapping.
+        """
+        if isinstance(self.data, collections.Sequence):
+            return xrange(len(self.data)).__iter__()
+        else:
+            return self.data.__iter__()
+
+    def __getitem__(self, key):
+        """Return the data associated with `key`.
+
+        This version assumes `self.data` is either a Sequence or a Mapping.
+        """
+        return self.data[key]
+
+    def __setitem__(self, key, value):
+        """Set the data associated with `key`.
+
+        This version assumes `self.data` is either a Sequence or a Mapping.
+        """
+        self.data[key] = value
+
+    ######################################################################
+    # Default methods using the __iter__() and __getitem__()
+    @property
+    def dtype(self):
+        # For now assume all arrays have same type
+        dtype = self[self.__iter__().next()].dtype
+        assert np.all([dtype is self[_k].dtype for _k in self])
+        return dtype
+
+    @property
+    def writeable(self):
+        """Set to `True` if the state is writeable, or `False` if the state
+        should only be read.
+        """
+        return np.all(getattr(self[key], 'writable', self[key].flags.writeable)
+                      for key in self)
+
+    @writeable.setter
+    def writeable(self, value):
+        for key in self:
+            data = self[key]
+            if hasattr(data, 'writeable'):
+                data.writeable = value
+            else:
+                data.flags.writeable = value
+
+
 class ArrayStateMixin(StateMixin):
     """Mixin providing support for states with a single data array.
 
     Assumes that the data is an array-like object called `self.data`.  This
     provides all the functionality required by IState.  All the user needs to
     provide are the methods for the required `IStateFor...Evolvers`.
-
-    Note: The `copy()` implementation requires a default constructor and
-    assumes that the only data attributes are `t`, `data`, and `potentials`.
-    If you have a more complicated object, override the `copy()` and
-    `copy_from()` methods.
     """
+    implements([INumexpr])
     t = 0.0
     data = None
     potentials = None
@@ -321,26 +394,31 @@ class ArrayStateMixin(StateMixin):
         """
         return self.data.dtype
 
-    def copy(self, y=None):
+    def copy(self):
         """Return a copy of the state.
 
-        Subclasses can override this to initialize a different `y` object.
+        Uses `copy.copy()` to shallow-copy attributes, and copy.deepcopy()` to
+        copy the data and potentials.
         """
-        if y is None:
-            y = self.__class__()
-        y.data = self.data.copy()
-        y.t = self.t
-        if self.potentials is not None:
-            y.potentials = self.potentials.copy()
+        y = copy.copy(self)
+        y.writeable = True      # Copies should be writeable
+        y.data = copy.deepcopy(self.data)
+        y.potentials = copy.deepcopy(self.potentials)
         return y
 
     def copy_from(self, y):
         """Set this state to be a copy of the state `y`"""
         assert self.writeable
-        self.t = y.t
-        self.data[...] = y.data
-        if y.potentials is not None:
-            self.potentials[...] = y.potentials
+        args = {}
+        for key in ['data', 'potentials']:
+            y_array = getattr(y, key)
+            if key in self.__dict__:
+                args[key] = getattr(self, key)
+                args[key][...] = y_array
+            else:
+                args[key] = copy.deepcopy(y_array)
+
+        self.__dict__.update(y.__dict__, **args)
 
     def axpy(self, x, a=1):
         """Perform `self += a*x` as efficiently as possible."""
@@ -357,9 +435,97 @@ class ArrayStateMixin(StateMixin):
     # `axpy` and `scale` instead.
 
     def __repr__(self):
-        return repr(self.data)
+        """We can't really do this since we don't know the constructor.  We
+        just show the data here."""
+        return "{}({})".format(self.__class__.__name__, repr(self.data))
 
     @property
     def __array_interface__(self):
         """Allows states to act as arrays with ``np.asarray(state)``."""
         return self.data.__array_interface__
+
+    def apply(self, expr, **kwargs):
+        kw = {}
+        for _k in kwargs:
+            kw[_k] = kwargs[_k]
+            if isinstance(kw[_k], self.__class__):
+                kw[_k] = kw[_k].data
+
+        expr(out=self.data, **kw)
+
+    ######################################################################
+    # Convenience methods
+    def __getitem__(self, key):
+        """Provides direct access to the array."""
+        return self.data[key]
+
+    def __setitem__(self, key, value):
+        """Provides direct access to the array."""
+        self.data[key] = value
+
+
+class ArraysStateMixin(StatesMixin, ArrayStateMixin):
+    """Mixin providing support for states with a list of data arrays.
+
+    Requires `__iter__()` provide keys `key` so that `self.data[key]` is an
+    array representing all the data. This provides all the functionality
+    required by IState.  All the user needs to provide are the methods for the
+    required `IStateFor...Evolvers`.
+    """
+    def copy(self):
+        """Return a copy of the state.
+
+        Uses `copy.copy()` to shallow-copy attributes, and copy.deepcopy()` to
+        copy the data and potentials.
+        """
+        y = copy.copy(self)
+        y.data = copy.deepcopy(self.data)
+        y.potentials = copy.deepcopy(self.potentials)
+        for key in self:
+            y[key][...] = self[key]
+        return y
+
+    def copy_from(self, y):
+        """Set this state to be a copy of the state `y`"""
+        assert self.writeable
+        data = self.data
+        for key in self:
+            self[key][...] = y[key]
+        args = dict(data=data, potentials=copy.deepcopy(y.potentials))
+        self.__dict__.update(y.__dict__, **args)
+
+    def axpy(self, x, a=1):
+        """Perform `self += a*x` as efficiently as possible."""
+        assert self.writeable
+        for key in self:
+            # Can't use += here because python translates that to __setitem__
+            # which we do not support
+            self[key].__iadd__(a*x[key])
+
+    def scale(self, f):
+        """Perform `self *= f` as efficiently as possible."""
+        assert self.writeable
+        for key in self:
+            self[key].__imul__(f)
+
+    @property
+    def __array_interface__(self):
+        """Allows states to act as arrays with ``np.asarray(state)``."""
+        raise NotImplementedError
+
+
+class MultiStateMixin(ArraysStateMixin):
+    """Mixin providing support for states comprising multiple states.
+
+    Requires `__iter__()` provide keys `key` so that `self.data[key]` is an
+    IState representing all the data.
+    """
+    def apply(self, expr, **kwargs):
+        for key in self:
+            kw = {}
+            for _k in kwargs:
+                kw[_k] = kwargs[_k]
+                if isinstance(kw[_k], self.__class__):
+                    kw[_k] = kw[_k][key]
+
+            self[key].apply(expr, **kw)

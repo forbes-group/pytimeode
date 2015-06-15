@@ -2,10 +2,15 @@
 
 Allows numexpr to be applied to State objects.
 """
+from __future__ import absolute_import
 
 import numpy as np
 import numexpr
 import sympy
+
+from mmfutils import interface
+
+from .. import interfaces
 
 
 class Expression(object):
@@ -22,6 +27,15 @@ class Expression(object):
     * Do not use the following names for arguments or variables:
       `I`, `_onejay`, `out`
 
+    Examples
+    --------
+    >>> np.random.seed(2)
+    >>> a = np.random.rand(10)
+    >>> expr = Expression('sin(a**3)', ['a'], dtype=a.dtype)
+    >>> res = np.empty(a.shape, dtype=a.dtype)
+    >>> res = expr(out=res, a=a)
+    >>> np.allclose(res, np.sin(a**3))
+    True
     """
 
     # Dictionary mapping numpy dtypes to numexpr kinds:
@@ -36,7 +50,7 @@ class Expression(object):
             dtype = np.dtype(type(obj_or_type))
         return self.dtype_to_type[dtype]
 
-    def __init__(self, expr, sig={}, state=None,
+    def __init__(self, expr, args, state=None, dtype=float,
                  constants={}, simplify=True,
                  optimization='aggressive',
                  truediv='auto', ex_uses_vml=False,
@@ -47,10 +61,17 @@ class Expression(object):
 
         Arguments
         ---------
-        state : IState
+        expr : str
+           String representing the expression.
+        args : [str]
+           List of argument names with parameters appearing in the expression.
+        state : INumexpr
            Instance of the state class implementing the IState interface.  If
            this is not provided, then the arguments will be assumed to be numpy
-           arrays, otherwise the __call__ function will iterate
+           arrays, otherwise the __call__ function will iterate.
+        dtype : type
+           If state is not provided, then this should be provided so the
+           signatures can be generated.
         optimization, truediv :
            These are arguments for the numexpr compiler.  See the numexpr
            documentation or source code.
@@ -58,7 +79,12 @@ class Expression(object):
            Additional kw arguments will be stored and passed to the call
            function.
         """
-        signature = [(_k, self.get_type(sig[_k])) for _k in sorted(sig)]
+        if state is not None:
+            interface.verifyObject(interfaces.INumexpr, state)
+            dtype = state.dtype
+
+        dtype = self.get_type(dtype)
+        signature = [(_k, dtype) for _k in sorted(args)]
 
         _onejay = sympy.S('_onejay')
         sexpr = sympy.S(expr).subs(constants).evalf()
