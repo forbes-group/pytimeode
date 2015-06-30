@@ -20,6 +20,19 @@ from setuptools.command.test import test as original_test
 
 NAME = "pytimeode"
 
+install_requires = [
+    'mmfutils>=0.4.3',
+    'persist>=0.9b2',
+    'zope.interface>=3.8.0'
+]
+
+test_requires = [
+    'nose>=1.3.6',
+    'coverage',
+    'flake8',
+    'pep8==1.5.7',     # Needed by flake8: dependency resolution issue if not pinned
+]
+
 # Remove NAME from sys.modules so that it gets covered in tests. See
 # http://stackoverflow.com/questions/11279096
 for mod in sys.modules.keys():
@@ -46,21 +59,8 @@ class test(original_test):
                 if e.code:
                     raise
 
-install_requires = [
-    'mmfutils>=0.4.3',
-    'persist>=0.9b2',
-    'zope.interface>=3.8.0'
-]
-
-test_requires = [
-    'nose>=1.3.6',
-    'coverage',
-    'flake8',
-    'pep8==1.5.7',     # Needed by flake8: dependency resolution issue if not pinned
-]
-
 setup(name=NAME,
-      version='0.3',
+      version='0.4dev',
       packages=find_packages(exclude=['tests']),
       cmdclass=dict(test=test),
 
