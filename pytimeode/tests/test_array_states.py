@@ -163,6 +163,16 @@ class TestArrayStateMixin(object):
         f3 = f2 / 1.5
         check(f3, s3)
 
+    def test_setting_dtype(self):
+        """Regression test for issue 5"""
+        s = self.State()
+        s.__dict__['dtype'] = float
+        s.data = s.data.astype(float)
+        nt.ok_(s.dtype is float)
+        s.__dict__['dtype'] = complex
+        s.data = s.data.astype(complex)
+        nt.ok_(s.dtype is complex)
+
 
 class TestArrayStatesMixin(object):
     def setUp(self):
@@ -268,6 +278,18 @@ class TestArrayStatesMixin(object):
         s3 = s2 / 1.5
         f3 = f2 / 1.5
         check(f3, s3)
+
+    def test_setting_dtype(self):
+        """Regression test for issue 5"""
+        s = self.State()
+        s.__dict__['dtype'] = float
+        for _k in s:
+            s.data[_k] = s.data[_k].astype(float)
+        nt.ok_(s.dtype is float)
+        s.__dict__['dtype'] = complex
+        for _k in s:
+            s.data[_k] = s.data[_k].astype(complex)
+        nt.ok_(s.dtype is complex)
 
 
 class TestArrayStatesDictMixin(object):

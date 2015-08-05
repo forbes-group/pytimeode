@@ -91,7 +91,7 @@ class Expression(object):
         if simplify:
             sexpr = sympy.simplify(sexpr).subs(sympy.I, _onejay)
 
-        expr = str(sexpr)
+        expr = str(sexpr).replace('Abs(', 'abs(')
         if '_onejay' in expr:
             signature.append(('_onejay', complex))
 

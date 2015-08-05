@@ -24,30 +24,6 @@ __all__ = ['IEvolver', 'IStateMinimal', 'IState', 'INumexpr',
 
 class IEvolver(Interface):
     """General interface for evolvers"""
-    """Requires:
-
-    # Split Operator uses
-    y.apply_exp_K(dt)
-    y.apply_exp_V(dt, potentials)
-    y.copy()
-    y.copy_from(y)
-    y.compute_dy()
-    y.axpy(x, a)
-    y.scale(self, f)
-
-    Also uses +=, +, -, * etc. but all these have default implementations in
-    terms of y.axpy and y.scale
-
-
-    V = y.potentials
-    V - V
-    0.5*V
-    y.potentials.copy()
-
-
-    # ABM uses
-
-    """
     y = Attribute("y", "Current state")
     t = Attribute("t", "Current time")
 
@@ -341,8 +317,11 @@ class StatesMixin(object):
     @property
     def dtype(self):
         # For now assume all arrays have same type
-        dtype = self[self.__iter__().next()].dtype
-        assert np.all([dtype is self[_k].dtype for _k in self])
+        if 'dtype' in self.__dict__:
+            dtype = self.__dict__['dtype']
+        else:
+            dtype = self[self.__iter__().next()].dtype
+        assert np.all([dtype == self[_k].dtype for _k in self])
         return dtype
 
     @property
@@ -392,7 +371,11 @@ class ArrayStateMixin(StateMixin):
         is assumed that the states will always be real and certain
         optimizations may take place.
         """
-        return self.data.dtype
+        if 'dtype' in self.__dict__:
+            dtype = self.__dict__['dtype']
+        else:
+            dtype = self.data.dtype
+        return dtype
 
     def copy(self):
         """Return a copy of the state.
