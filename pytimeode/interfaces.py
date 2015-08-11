@@ -397,7 +397,8 @@ class ArrayStateMixin(StateMixin):
             y_array = getattr(y, key)
             if key in self.__dict__:
                 args[key] = getattr(self, key)
-                args[key][...] = y_array
+                if y_array is not None:
+                    args[key][...] = y_array
             else:
                 args[key] = copy.deepcopy(y_array)
 
