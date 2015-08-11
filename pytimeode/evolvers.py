@@ -81,15 +81,14 @@ class EvolverBase(Object):
 
     ######################################################################
     # Defaults:  Subclasses may want to overload these for performance.
-    def get_dy(self, y=None, t=None, omega=None):
+    def get_dy(self, y=None, t=None, dy=None):
         r"""Return the `y'=dy/dt`.  This is used by ABM evolvers."""
         if t is None:
             t = self.t
         if y is None:
             y = self.get_y()
-
         with y.lock:
-            dy = y.compute_dy(t=t)
+            dy = y.compute_dy(t=t, dy=dy)
         return dy
 
     def evolve(self, steps=None, omega=None):
@@ -232,6 +231,14 @@ class EvolverABM(EvolverBase):
     for a total of 8 arrays.  One can reduce this to 7 with some convoluted
     manipulations to reuse previous memory.
 
+    Note that a copy of the original array will be made by default,
+    but this copy can be suppressed by setting `copy=False` in the
+    constructor.  (Note that the original state will then be mutated
+    to an unspecified value.)
+
+    If using `numexpr`, then we need one extra array _tmp until Issue
+    92 is merged.
+
     Notes
     -----
     * We store `161/170*(c - p)` values in :attr:`dcps`.  These are scaled
@@ -274,8 +281,8 @@ class EvolverABM(EvolverBase):
         # 2 copies for the ys, 2 (predictor - corrector) differences,
         # and 4 copies for dy = -1j*H*y
         if self.no_runge_kutta:
-            self.ys = [_y.copy() for _y in [y0] * 2]
-            self.dcps = [_y*(161/170*0) for _y in [y0] * 2]
+            self.ys = [y0, y0.copy()]
+            self.dcps = [_y*(161/170*0) for _y in self.ys]
             self.dys = [_y*0 for _y in [y0]*4]
         else:
             self.ys = [y0]
@@ -308,16 +315,21 @@ class EvolverABM(EvolverBase):
                 args=['m', 'dcp', 'dcp0'],
                 ex_uses_vml=False)
 
-            # Until issue 93 makes it into a release, we will not use the same
-            # variable in and out, so we need one extra array
-            # http://code.google.com/p/numexpr/issues/detail?id=93
+            if numexpr.__version__ < "2.3":
+                # Until issue 93 makes it into a release, we will not use the same
+                # variable in and out, so we need one extra array
+                # http://code.google.com/p/numexpr/issues/detail?id=93
+                pass
             self._tmp = self.y.copy()
 
     def do_step(self, first=None, final=None):
         if len(self.dys) < 4:
             self.do_step_runge_kutta()
             self.ys = self.ys[:2]            # Only keep two previous steps
-            self.dcps = self.dcps[:2]
+            if len(self.dys) == 4:
+                # Only allocate these here.  Not exactly sure what
+                # values to use.
+                self.dcps = [0*_y for _y in self.ys]
         else:
             #self.do_step_ABM()
             self.do_step_ABM_numexpr()
@@ -326,12 +338,6 @@ class EvolverABM(EvolverBase):
         # bunch of times that are all the same.
         self.t = float(self.t)
 
-    def _get_dy(self, y, t, dy=None):
-        r"""Helper to compute `y'`."""
-        with y.lock:
-            dy = y.compute_dy(t=t, dy=dy)
-        return dy
-
     def do_step_runge_kutta(self):
         r"""4th order Runge Kutta for the first four steps to populate the
         predictor/corrector arrays."""
@@ -339,13 +345,11 @@ class EvolverABM(EvolverBase):
         h = self.dt
         ys = self.ys
         dys = self.dys
-        dcps = self.dcps
 
-        k = [None, None, None, None]
         y = self.ys[0].copy()
         if len(self.dys) < len(self.ys):
             # Need to compute dy
-            dy = self._get_dy(y=y, t=self.t)
+            dy = self.get_dy(y=y, t=self.t)
             dys.insert(0, dy)
         else:
             dy = self.dys[0]
@@ -354,21 +358,59 @@ class EvolverABM(EvolverBase):
         # converted to an array (a problem for dy which support
         # __array_interface__)
 
-        k[0] = dy * h
-        k[1] = (self._get_dy(y + k[0]/2., t=t + h/2.)) * h
-        k[2] = (self._get_dy(y + k[1]/2., t=t + h/2.)) * h
-        k[3] = (self._get_dy(y + k[2],    t=t + h)) * h
-        y += (k[0] + 2*k[1] + 2*k[2] + k[3])/6.0
+        if False:           # pragma: no cover
+            # A simple but memory-inefficient approach
+            # Uses a total of 15 arrays!
+            k = [None, None, None, None]
+            k[0] = dy * h
+            k[1] = (self.get_dy(y + k[0]/2., t=t + h/2.)) * h
+            k[2] = (self.get_dy(y + k[1]/2., t=t + h/2.)) * h
+            k[3] = (self.get_dy(y + k[2],    t=t + h)) * h
+            y += (k[0] + 2*k[1] + 2*k[2] + k[3])/6.0
+            del k
+        elif False:             # pragma: no cover
+            # Better: uses a total of 11 arrays
+            f0 = dy
+            y.axpy(dy, h/2.)
+            f1 = self.get_dy(y, t=t + h/2.)
+            y.axpy(dy, -h/2.)
+            y.axpy(f1, h/2.)
+            f2 = self.get_dy(y, t=t + h/2.)
+            y.axpy(f1, -h/2.)
+            y.axpy(f2, h)
+            f3 = self.get_dy(y, t=t + h)
+            y.axpy(f2, -h)
+            y.axpy(f0, h/6.)
+            y.axpy(f1, h/3.)
+            y.axpy(f2, h/3.)
+            y.axpy(f3, h/6.)
+            del f0, f1, f2, f3
+        else:
+            # I think this is the best we can do memory wise: (10 arrays)
+            f0 = dy
+            y.axpy(dy, h/2.)
+            f1 = self.get_dy(y, t=t + h/2.)
+            y.axpy(dy, -h/2.)
+            y.axpy(f1, h/2.)
+            f2 = self.get_dy(y, t=t + h/2.)
+            y.axpy(f1, -h/2.)
+            y.axpy(f2, h)
+            f1.axpy(f2, -2.)
+            f3 = self.get_dy(y, dy=f2, t=t + h)
+            del f2
+            y.axpy(f1, h/3.)
+            y.axpy(f0, h/6.)
+            y.axpy(f3, h/6.)
+            del f0, f1, f3
 
         if self.normalize:
             y.normalize()
 
         self.t += h
-        dy = self._get_dy(y=y, t=self.t)
+        dy = self.get_dy(y=y, t=self.t)
 
         ys.insert(0, y)
         dys.insert(0, dy)
-        dcps.insert(0, 0*y)     # Not exactly sure what to use here.
 
     def do_step_ABM(self):
         r"""Perform one step of the ABM method."""
@@ -379,7 +421,7 @@ class EvolverABM(EvolverBase):
         dys = self.dys
 
         # Remove array from the end.  We will use this for the modifier, and
-        # the finally for the new y
+        # then finally for the new y
         y = ys.pop()
 
         y *= 0.5
@@ -391,7 +433,7 @@ class EvolverABM(EvolverBase):
         dcp = dcps.pop()
 
         # Compute m' in next dcp array, then update
-        dcp = self._get_dy(y=y, t=t+dt, dy=dcp)
+        dcp = self.get_dy(y=y, t=t+dt, dy=dcp)
         dcp *= self._am
         for _i in xrange(4):
             dcp.axpy(x=dys[_i], a=self._ac[_i])
@@ -402,7 +444,7 @@ class EvolverABM(EvolverBase):
         t += dt
 
         dy = dys.pop()
-        dy = self._get_dy(y=y, t=t, dy=dy)
+        dy = self.get_dy(y=y, t=t, dy=dy)
 
         if self.normalize:
             y.normalize()
@@ -435,7 +477,7 @@ class EvolverABM(EvolverBase):
 
         # Compute dm = m' in the _tmp array
         dm = self._tmp
-        dm = self._get_dy(y=m, t=t+dt, dy=dm)
+        dm = self.get_dy(y=m, t=t+dt, dy=dm)
 
         # Computed dcp
         dcp.apply(self._expr_dcp,
@@ -454,7 +496,7 @@ class EvolverABM(EvolverBase):
         t += dt
 
         dy = dys.pop()
-        dy = self._get_dy(y=y, t=t, dy=dy)
+        dy = self.get_dy(y=y, t=t, dy=dy)
 
         ys.insert(0, y)
         dys.insert(0, dy)
