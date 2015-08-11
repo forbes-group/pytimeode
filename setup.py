@@ -60,7 +60,7 @@ class test(original_test):
                     raise
 
 setup(name=NAME,
-      version='0.6',
+      version='0.7dev',
       packages=find_packages(exclude=['tests']),
       cmdclass=dict(test=test),
 
