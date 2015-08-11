@@ -7,7 +7,7 @@ from zope.interface import classImplementsOnly
 from mmfutils.interface import implements
 
 from ..interfaces import (IStateForABMEvolvers, IStateForSplitEvolvers,
-                          INumexpr, ArrayStateMixin)
+                          ArrayStateMixin)
 from ..evolvers import EvolverABM, EvolverSplit
 
 
@@ -35,12 +35,6 @@ class State(ArrayStateMixin):
     def __init__(self):
         self.data = np.zeros(2, dtype=complex)
         self._copy()
-
-    def compute_dy(self, t=0, dy=None):
-        if dy is None:
-            dy = self.copy()
-        dy[...] = -self[...]
-        return dy
 
     def compute_dy(self, t=0, dy=None):
         if dy is None:
