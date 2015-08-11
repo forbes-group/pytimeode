@@ -81,15 +81,14 @@ class EvolverBase(Object):
 
     ######################################################################
     # Defaults:  Subclasses may want to overload these for performance.
-    def get_dy(self, y=None, t=None, omega=None):
+    def get_dy(self, y=None, t=None, dy=None):
         r"""Return the `y'=dy/dt`.  This is used by ABM evolvers."""
         if t is None:
             t = self.t
         if y is None:
             y = self.get_y()
-
         with y.lock:
-            dy = y.compute_dy(t=t)
+            dy = y.compute_dy(t=t, dy=dy)
         return dy
 
     def evolve(self, steps=None, omega=None):
@@ -339,12 +338,6 @@ class EvolverABM(EvolverBase):
         # bunch of times that are all the same.
         self.t = float(self.t)
 
-    def _get_dy(self, y, t, dy=None):
-        r"""Helper to compute `y'`."""
-        with y.lock:
-            dy = y.compute_dy(t=t, dy=dy)
-        return dy
-
     def do_step_runge_kutta(self):
         r"""4th order Runge Kutta for the first four steps to populate the
         predictor/corrector arrays."""
@@ -356,7 +349,7 @@ class EvolverABM(EvolverBase):
         y = self.ys[0].copy()
         if len(self.dys) < len(self.ys):
             # Need to compute dy
-            dy = self._get_dy(y=y, t=self.t)
+            dy = self.get_dy(y=y, t=self.t)
             dys.insert(0, dy)
         else:
             dy = self.dys[0]
@@ -365,27 +358,27 @@ class EvolverABM(EvolverBase):
         # converted to an array (a problem for dy which support
         # __array_interface__)
 
-        if False:
+        if False:           # pragma: no cover
             # A simple but memory-inefficient approach
             # Uses a total of 15 arrays!
             k = [None, None, None, None]
             k[0] = dy * h
-            k[1] = (self._get_dy(y + k[0]/2., t=t + h/2.)) * h
-            k[2] = (self._get_dy(y + k[1]/2., t=t + h/2.)) * h
-            k[3] = (self._get_dy(y + k[2],    t=t + h)) * h
+            k[1] = (self.get_dy(y + k[0]/2., t=t + h/2.)) * h
+            k[2] = (self.get_dy(y + k[1]/2., t=t + h/2.)) * h
+            k[3] = (self.get_dy(y + k[2],    t=t + h)) * h
             y += (k[0] + 2*k[1] + 2*k[2] + k[3])/6.0
             del k
-        elif False:
+        elif False:             # pragma: no cover
             # Better: uses a total of 11 arrays
             f0 = dy
             y.axpy(dy, h/2.)
-            f1 = self._get_dy(y, t=t + h/2.)
+            f1 = self.get_dy(y, t=t + h/2.)
             y.axpy(dy, -h/2.)
             y.axpy(f1, h/2.)
-            f2 = self._get_dy(y, t=t + h/2.)
+            f2 = self.get_dy(y, t=t + h/2.)
             y.axpy(f1, -h/2.)
             y.axpy(f2, h)
-            f3 = self._get_dy(y, t=t + h)
+            f3 = self.get_dy(y, t=t + h)
             y.axpy(f2, -h)
             y.axpy(f0, h/6.)
             y.axpy(f1, h/3.)
@@ -396,14 +389,14 @@ class EvolverABM(EvolverBase):
             # I think this is the best we can do memory wise: (10 arrays)
             f0 = dy
             y.axpy(dy, h/2.)
-            f1 = self._get_dy(y, t=t + h/2.)
+            f1 = self.get_dy(y, t=t + h/2.)
             y.axpy(dy, -h/2.)
             y.axpy(f1, h/2.)
-            f2 = self._get_dy(y, t=t + h/2.)
+            f2 = self.get_dy(y, t=t + h/2.)
             y.axpy(f1, -h/2.)
             y.axpy(f2, h)
             f1.axpy(f2, -2.)
-            f3 = self._get_dy(y, dy=f2, t=t + h)
+            f3 = self.get_dy(y, dy=f2, t=t + h)
             del f2
             y.axpy(f1, h/3.)
             y.axpy(f0, h/6.)
@@ -414,7 +407,7 @@ class EvolverABM(EvolverBase):
             y.normalize()
 
         self.t += h
-        dy = self._get_dy(y=y, t=self.t)
+        dy = self.get_dy(y=y, t=self.t)
 
         ys.insert(0, y)
         dys.insert(0, dy)
@@ -440,7 +433,7 @@ class EvolverABM(EvolverBase):
         dcp = dcps.pop()
 
         # Compute m' in next dcp array, then update
-        dcp = self._get_dy(y=y, t=t+dt, dy=dcp)
+        dcp = self.get_dy(y=y, t=t+dt, dy=dcp)
         dcp *= self._am
         for _i in xrange(4):
             dcp.axpy(x=dys[_i], a=self._ac[_i])
@@ -451,7 +444,7 @@ class EvolverABM(EvolverBase):
         t += dt
 
         dy = dys.pop()
-        dy = self._get_dy(y=y, t=t, dy=dy)
+        dy = self.get_dy(y=y, t=t, dy=dy)
 
         if self.normalize:
             y.normalize()
@@ -484,7 +477,7 @@ class EvolverABM(EvolverBase):
 
         # Compute dm = m' in the _tmp array
         dm = self._tmp
-        dm = self._get_dy(y=m, t=t+dt, dy=dm)
+        dm = self.get_dy(y=m, t=t+dt, dy=dm)
 
         # Computed dcp
         dcp.apply(self._expr_dcp,
@@ -503,7 +496,7 @@ class EvolverABM(EvolverBase):
         t += dt
 
         dy = dys.pop()
-        dy = self._get_dy(y=y, t=t, dy=dy)
+        dy = self.get_dy(y=y, t=t, dy=dy)
 
         ys.insert(0, y)
         dys.insert(0, dy)
