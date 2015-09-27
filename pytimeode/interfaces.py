@@ -16,7 +16,9 @@ import numpy as np
 from mmfutils.interface import (implements, Interface, Attribute)
 
 __all__ = ['IEvolver', 'IStateMinimal', 'IState', 'INumexpr',
-           'IStateForABMEvolvers', 'IStateForSplitEvolvers',
+           'IStateForABMEvolvers',
+           'IStateForSplitEvolvers',
+           'IStatePotentialsForSplitEvolvers',
            'IStateWithNormalize',
            'StateMixin', 'ArrayStateMixin', 'ArraysStateMixin',
            'MultiStateMixin']
@@ -149,18 +151,47 @@ class IStateForSplitEvolvers(IState):
     (kinetic energy) and $V$ (potential energy) so that $i dy/dt = (K+V)y$.
     The method requires that each of these operators be exponentiated.  The
     approach uses a Trotter decomposition that provides higher order accuracy,
-    but requires evaluation of the potentials at an intermediate time.  The
-    ``get_potentials()`` method must therefore be able to compute the
-    potentials at a specified time which might lie at a half-step.
+    but requires evaluation of the potentials at an intermediate time.
+
+    This interface requires that the `apply_exp_V()` method accept
+    another state object which should be used for calculating any
+    non-linear terms in $V$ which are state dependent.
+
+    If your problem is linear (i.e. $V$ depends only on time, not on
+    the state as in the case of the usual linear Schrodinger
+    equation), then you should set the linear attribute which will
+    improve performance (but do not use this for non-linear problems
+    or the order of convergence will be reduced).
     """
-    def get_potentials(t):
-        """Return `potentials` at time `t`."""
+
+    linear = Attribute("linear", "Is the problem linear?")
 
     def apply_exp_K(dt, t=None):
         r"""Apply $e^{-i K dt}$ in place"""
 
-    def apply_exp_V(dt, t=None, potentials=None):
-        r"""Apply $e^{-i V dt}$ in place"""
+    def apply_exp_V(dt, state=None, t=None):
+        r"""Apply $e^{-i V dt}$ in place using `state` for any
+        nonlinear dependence in V."""
+
+
+class IStatePotentialsForSplitEvolvers(IStateForSplitEvolvers):
+    r"""Interface required by Split Operator evolvers.
+
+    This is a specialization of `IStateForSplitEvolvers` that uses an
+    alternative method `get_potentials()` to compute the non-linear
+    portion of the potential. It is intended for use when the state is
+    much more complicated than the non-linear portion of the
+    potential, hence only a separate copy of the potentials is maintained.
+    """
+    def get_potentials(t):
+        """Return `potentials` at time `t`."""
+
+    def apply_exp_V(dt, t=None):
+        r"""Apply $e^{-i V dt}$ in place using `state` for any
+        nonlinear dependence in V."""
+
+    def apply_exp_V(dt, potentials, t=None):
+        r"""Apply $e^{-i V dt}$ in place using `potentials`"""
 
 
 class IStateWithNormalize(IState):
@@ -183,6 +214,8 @@ class IStateWithNormalize(IState):
 # methods required by the Minimal interfaces
 
 class StateMixin(object):
+    linear = False          # By default assume problems are nonlinear
+
     # Note: we could get away with __imul__ but it requires one return self
     # which can be a little confusing, so we allow the user to simply define
     # `axpy` and `scale` instead.
@@ -268,6 +301,8 @@ class StatesMixin(object):
     assignment with ``x[...] = y``, and a ``flags.writeable`` attribute.)
     """
     implements([INumexpr])
+
+    linear = False          # By default assume problems are nonlinear
     data = None
 
     def __len__(self):

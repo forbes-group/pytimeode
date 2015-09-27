@@ -117,10 +117,10 @@ class EvolverSplit(EvolverBase):
     the Hamiltonian into Kinetic and Potential pieces:
 
     .. math::
-       U_{\delta t} = e^{i\hbar \delta t (K + V)}
-         \approx e^{i\hbar \delta t K/2}
-                 e^{i\hbar \delta t V}
-                 e^{i\hbar \delta t K/2}
+       U_{\delta t} = e^{-i\hbar \delta t (K + V)}
+         \approx e^{-i\hbar \delta t K/2}
+                 e^{-i\hbar \delta t V}
+                 e^{-i\hbar \delta t K/2}
 
     This requires that :math:`V` is diagonal in position space and that the
     kinetic operator is diagonal in momentum space.
@@ -131,11 +131,19 @@ class EvolverSplit(EvolverBase):
     def __init__(self, y, dt, t=0.0, copy=True, **kw):
         interface.verifyObject(interfaces.IStateForSplitEvolvers, y)
         EvolverBase.__init__(self, y=y, dt=dt, t=t, copy=copy, **kw)
+        if y.linear:
+            pass
+        elif interfaces.IStatePotentialsForSplitEvolvers.providedBy(y):
+            interface.verifyObject(interfaces.IStatePotentialsForSplitEvolvers, y)
+            self.use_nonlinear_potentials = True
+        else:
+            self.use_nonlinear_potentials = False
+            self._nonlinear_tmp_state = y.copy()
 
     def init(self):
         EvolverBase.init(self)
 
-    def do_step1(self, first=False, final=False):
+    def do_step(self, first=False, final=False):
         r"""Perform one step of the Split method.
 
         The formal steps are grouped as::
@@ -164,14 +172,29 @@ class EvolverSplit(EvolverBase):
         # correct.
 
         # Compute and store V(t)
-        V0 = y.get_potentials(t=t)
+        if y.linear:
+            # For linear problems, we can just evolve one full step.
+            y.apply_exp_V(dt=dt, t=t)  # full step with V(t)
+        elif self.use_nonlinear_potentials:
+            # Nonlinear problems with a get_potentials function
+            V = y.get_potentials(t=t)
+            y.apply_exp_V(dt=dt, t=t, potentials=V)    # full step with V(t)
 
-        y.apply_exp_V(dt=dt, t=t, potentials=V0)    # full step with V(t)
-        # Compute and store V(t+dt)
-        V1 = y.get_potentials(t=t+dt)
+            # Compute and store V(t+dt)
+            V -= y.get_potentials(t=t+dt)   # V0 - V1
+            V *= -0.5                       # (V1 - V0)/2
 
-        # Correct step
-        y.apply_exp_V(dt=dt, t=t, potentials=0.5*(V1 - V0))
+            # Correct step
+            y.apply_exp_V(dt=dt, t=t, potentials=V)
+        else:
+            # General non-linear problems require the temporary state.
+            y1 = self._nonlinear_tmp_state
+            y1.copy_from(y)
+            y1.apply_exp_V(dt=dt, t=t, state=y1)
+            y1.axpy(y)
+            y1.scale(0.5)
+            # Correct step
+            y.apply_exp_V(dt=dt, t=t, state=y1)
 
         if final:
             # Only half of K at the end
@@ -189,34 +212,6 @@ class EvolverSplit(EvolverBase):
         # the same array.
         y.t = t
         self.t = float(t)
-
-    def do_step2(self, first=None, final=None):
-        t = self.t
-        dt = self.dt
-        y = self.y
-
-        V0 = y.get_potentials(t=t)
-
-        # First step with half of the kinetic energy
-        y.apply_exp_K(dt=dt/2, t=t)
-        y1 = y.copy()
-        y1.apply_exp_V(dt=dt, t=t, potentials=V0)    # full step with V(t)
-        y1.apply_exp_K(dt=dt/2, t=t)
-        V1 = y1.get_potentials(t+dt)
-        del y1
-
-        # Correct step
-        y.apply_exp_V(dt=dt, t=t, potentials=0.5*(V1 + V0))
-        y.apply_exp_K(dt=dt/2, t=t)
-
-        if self.normalize:
-            y.normalize()
-
-        t += dt
-        y.t = t
-        self.t = float(t)
-
-    do_step = do_step1
 
     def get_y(self):
         r"""Return a copy of the current `y`."""
