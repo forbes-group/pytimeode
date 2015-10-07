@@ -2,11 +2,13 @@
 import nose.tools as nt
 import numpy as np
 
-from zope.interface import classImplementsOnly
+from zope.interface import classImplementsOnly, classImplements
 
 from mmfutils.interface import implements
 
-from ..interfaces import (IStateForABMEvolvers, IStateForSplitEvolvers,
+from ..interfaces import (IStateForABMEvolvers,
+                          IStateForSplitEvolvers,
+                          IStatePotentialsForSplitEvolvers,
                           ArrayStateMixin)
 from ..evolvers import EvolverABM, EvolverSplit
 
@@ -14,7 +16,7 @@ from ..evolvers import EvolverABM, EvolverSplit
 class State(ArrayStateMixin):
     """This class keeps track of all copies."""
     implements([IStateForABMEvolvers, IStateForSplitEvolvers])
-
+    linear = True
     copies = 0
     max_copies = 0
 
@@ -42,19 +44,18 @@ class State(ArrayStateMixin):
         dy[...] = -self[...]
         return dy
 
-    def get_potentials(self, t):
-        """Return `potentials` at time `t`."""
-        return -1.0
-
     def apply_exp_K(self, dt, t=None):
-        r"""Apply $e^{i K dt}$ in place"""
+        r"""Apply $e^{-i K dt}$ in place"""
         pass
 
-    def apply_exp_V(self, dt, t=None, potentials=None):
-        r"""Apply $e^{i V dt}$ in place"""
-        if potentials is None:
-            potentials = self.get_potentials(t=t)
-        self *= np.exp(1j*potentials*dt)
+    def apply_exp_V(self, dt, t=None, state=None):
+        r"""Apply $e^{-i V dt}$ in place"""
+        if self.linear:
+            # Linear problems should never be called with state
+            nt.ok_(state is None)
+
+        V = -1
+        self *= np.exp(-1j*V*dt)
 
     def copy(self):
         self._copy()
@@ -64,12 +65,31 @@ class State(ArrayStateMixin):
         self._del()
 
 
+class StatePotentials(State):
+    implements(IStatePotentialsForSplitEvolvers)
+
+    linear = False
+    copies = 0
+    max_copies = 0
+
+    def get_potentials(self, t):
+        return -1
+
+    def apply_exp_V(self, dt, t=None, potentials=None):
+        V = potentials
+        self *= np.exp(-1j*V*dt)
+
+
 class StateNoNumexpr(State):
     copies = 0
     max_copies = 0
 
+
 classImplementsOnly(StateNoNumexpr, [IStateForABMEvolvers,
                                      IStateForSplitEvolvers])
+classImplements(StatePotentials, [IStateForABMEvolvers,
+                                  IStateForSplitEvolvers,
+                                  IStatePotentialsForSplitEvolvers])
 
 
 class TestMemory(object):
@@ -95,10 +115,35 @@ class TestMemory(object):
         e.evolve(10)
         nt.assert_less_equal(StateNoNumexpr.max_copies, 10)
 
-    def test_split(self):
+    def test_split_nonlinear(self):
+        """The Split evolver should require only 1 new states"""
+        nt.assert_equal(StateNoNumexpr.max_copies, 1)
+        self.state.linear = False
+        e = EvolverSplit(y=self.state, dt=0.01, copy=False)
+        nt.assert_less_equal(StateNoNumexpr.max_copies, 2)
+        e.evolve(10)
+        nt.assert_less_equal(StateNoNumexpr.max_copies, 2)
+        e.evolve(10)
+        nt.assert_less_equal(StateNoNumexpr.max_copies, 2)
+
+    def test_split_linear(self):
         """The Split evolver should not require any new states"""
         nt.assert_equal(StateNoNumexpr.max_copies, 1)
+        self.state.linear = True
         e = EvolverSplit(y=self.state, dt=0.01, copy=False)
+        nt.assert_less_equal(StateNoNumexpr.max_copies, 1)
+        e.evolve(10)
+        nt.assert_less_equal(StateNoNumexpr.max_copies, 1)
+        e.evolve(10)
+        nt.assert_less_equal(StateNoNumexpr.max_copies, 1)
+
+    def test_split_potential(self):
+        """The Split evolver should require no new states"""
+        StatePotentials._reset()
+        state = StatePotentials()
+        state.linear = False
+        nt.assert_equal(StatePotentials.max_copies, 1)
+        e = EvolverSplit(y=state, dt=0.01, copy=False)
         nt.assert_less_equal(StateNoNumexpr.max_copies, 1)
         e.evolve(10)
         nt.assert_less_equal(StateNoNumexpr.max_copies, 1)
