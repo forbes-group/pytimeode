@@ -87,6 +87,8 @@ class EvolverBase(Object):
             t = self.t
         if y is None:
             y = self.get_y()
+        if dy is None:
+            dy = y.empty()
         with y.lock:
             dy = y.compute_dy(t=t, dy=dy)
         return dy
@@ -174,7 +176,7 @@ class EvolverSplit(EvolverBase):
         # Compute and store V(t)
         if y.linear:
             # For linear problems, we can just evolve one full step.
-            y.apply_exp_V(dt=dt, t=t)  # full step with V(t)
+            y.apply_exp_V(dt=dt, state=None, t=t)  # full step with V(t)
         elif self.use_nonlinear_potentials:
             # Nonlinear problems with a get_potentials function
             V = y.get_potentials(t=t)

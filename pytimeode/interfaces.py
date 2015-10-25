@@ -21,7 +21,9 @@ __all__ = ['IEvolver', 'IStateMinimal', 'IState', 'INumexpr',
            'IStatePotentialsForSplitEvolvers',
            'IStateWithNormalize',
            'StateMixin', 'ArrayStateMixin', 'ArraysStateMixin',
-           'MultiStateMixin']
+           'MultiStateMixin',
+           'implements'
+           ]
 
 
 class IEvolver(Interface):
@@ -113,6 +115,13 @@ class IState(IStateMinimal):
     def __div__(f):
         """Return `self / y`"""
 
+    def empty():
+        """Return a writeable but uninitialized copy of the state.
+
+        Can be implemented with `self.copy()` but some states might be
+        able to make a faster version if the data does not need to be copied.
+        """
+
 
 class INumexpr(Interface):
     """Allows for numexpr optimizations"""
@@ -136,12 +145,8 @@ class IStateForABMEvolvers(IState):
     These evolvers are very general, requiring only the ability for the problem
     to compute $dy/dt$.
     """
-    def compute_dy(t, dy=None):
-        """Return `dy/dt` at time `t`.
-
-        If `dy` is provided, then use it for the result, otherwise return a new
-        state.
-        """
+    def compute_dy(t, dy):
+        """Return `dy/dt` at time `t` using the memory in state `dy`."""
 
 
 class IStateForSplitEvolvers(IState):
@@ -169,9 +174,10 @@ class IStateForSplitEvolvers(IState):
     def apply_exp_K(dt, t=None):
         r"""Apply $e^{-i K dt}$ in place"""
 
-    def apply_exp_V(dt, state=None, t=None):
+    def apply_exp_V(dt, state, t=None):
         r"""Apply $e^{-i V dt}$ in place using `state` for any
-        nonlinear dependence in V."""
+        nonlinear dependence in V. (Linear problems should ignore
+        `state`.)"""
 
 
 class IStatePotentialsForSplitEvolvers(IStateForSplitEvolvers):
@@ -185,10 +191,6 @@ class IStatePotentialsForSplitEvolvers(IStateForSplitEvolvers):
     """
     def get_potentials(t):
         """Return `potentials` at time `t`."""
-
-    def apply_exp_V(dt, t=None):
-        r"""Apply $e^{-i V dt}$ in place using `state` for any
-        nonlinear dependence in V."""
 
     def apply_exp_V(dt, potentials, t=None):
         r"""Apply $e^{-i V dt}$ in place using `potentials`"""
@@ -291,6 +293,9 @@ class StateMixin(object):
         finally:
             self.writeable = writeable
 
+    def empty(self):
+        return self.copy()
+
 
 class StatesMixin(object):
     """Mixin for states with a collection (Sequence or Mapping) of data.
@@ -387,7 +392,6 @@ class ArrayStateMixin(StateMixin):
     implements([INumexpr])
     t = 0.0
     data = None
-    potentials = None
 
     @property
     def writeable(self):
@@ -416,28 +420,25 @@ class ArrayStateMixin(StateMixin):
         """Return a copy of the state.
 
         Uses `copy.copy()` to shallow-copy attributes, and copy.deepcopy()` to
-        copy the data and potentials.
+        copy the data.
         """
         y = copy.copy(self)
         y.writeable = True      # Copies should be writeable
         y.data = copy.deepcopy(self.data)
-        y.potentials = copy.deepcopy(self.potentials)
         return y
 
     def copy_from(self, y):
         """Set this state to be a copy of the state `y`"""
         assert self.writeable
-        args = {}
-        for key in ['data', 'potentials']:
-            y_array = getattr(y, key)
-            if key in self.__dict__:
-                args[key] = getattr(self, key)
-                if y_array is not None:
-                    args[key][...] = y_array
-            else:
-                args[key] = copy.deepcopy(y_array)
+        self[...] = y[...]
+        self.__dict__.update(y.__dict__, data=self.data)
 
-        self.__dict__.update(y.__dict__, **args)
+    def empty(self):
+        """Return an uninitialized copy of the state."""
+        y = copy.copy(self)
+        y.writeable = True      # Copies should be writeable
+        y.data = np.empty_like(self.data)
+        return y
 
     def axpy(self, x, a=1):
         """Perform `self += a*x` as efficiently as possible."""
@@ -495,23 +496,28 @@ class ArraysStateMixin(StatesMixin, ArrayStateMixin):
         """Return a copy of the state.
 
         Uses `copy.copy()` to shallow-copy attributes, and copy.deepcopy()` to
-        copy the data and potentials.
+        copy the data.
         """
         y = copy.copy(self)
         y.data = copy.deepcopy(self.data)
-        y.potentials = copy.deepcopy(self.potentials)
         for key in self:
             y[key][...] = self[key]
+        return y
+
+    def empty(self):
+        """Return an uninitialized copy of the state."""
+        y = copy.copy(self)
+        y.data = copy.copy(self.data)
+        for key in self:
+            y[key] = np.empty_like(self[key])
         return y
 
     def copy_from(self, y):
         """Set this state to be a copy of the state `y`"""
         assert self.writeable
-        data = self.data
         for key in self:
             self[key][...] = y[key]
-        args = dict(data=data, potentials=copy.deepcopy(y.potentials))
-        self.__dict__.update(y.__dict__, **args)
+        self.__dict__.update(y.__dict__, data=self.data)
 
     def axpy(self, x, a=1):
         """Perform `self += a*x` as efficiently as possible."""
@@ -548,3 +554,11 @@ class MultiStateMixin(ArraysStateMixin):
                     kw[_k] = kw[_k][key]
 
             self[key].apply(expr, **kw)
+
+    def empty(self):
+        """Return an uninitialized copy of the state."""
+        y = copy.copy(self)
+        y.data = copy.copy(self.data)
+        for key in self:
+            y[key] = self[key].empty()
+        return y
