@@ -106,7 +106,7 @@ class Expression(object):
         variables = {}
         for a in ast.allOf('variable'):
             variables[a.value] = a
-            variable_names = set(variables.keys())
+        variable_names = set(variables.keys())
         signature = [(_v, types[_v]) for _v in types if _v in variable_names]
 
         self._numexpr = numexpr.NumExpr(
