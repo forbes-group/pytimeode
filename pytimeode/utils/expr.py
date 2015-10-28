@@ -4,6 +4,8 @@ Allows numexpr to be applied to State objects.
 """
 from __future__ import absolute_import
 
+import collections
+
 import numpy as np
 import numexpr
 import sympy
@@ -84,7 +86,10 @@ class Expression(object):
             dtype = state.dtype
 
         dtype = self.get_type(dtype)
-        signature = [(_k, dtype) for _k in sorted(args)]
+        if isinstance(args, collections.Mapping):
+            signature = [(_k, args.get(_k, dtype)) for _k in sorted(args)]
+        else:
+            signature = [(_k, dtype) for _k in sorted(args)]
 
         _onejay = sympy.S('_onejay')
         sexpr = sympy.S(expr).subs(constants).evalf()
@@ -94,6 +99,15 @@ class Expression(object):
         expr = str(sexpr).replace('Abs(', 'abs(')
         if '_onejay' in expr:
             signature.append(('_onejay', complex))
+
+        types = collections.OrderedDict(signature)
+        ast = numexpr.necompiler.expressionToAST(
+            numexpr.necompiler.stringToExpression(expr, types, {}))
+        variables = {}
+        for a in ast.allOf('variable'):
+            variables[a.value] = a
+            variable_names = set(variables.keys())
+        signature = [(_v, types[_v]) for _v in types if _v in variable_names]
 
         self._numexpr = numexpr.NumExpr(
             expr,
@@ -112,15 +126,3 @@ class Expression(object):
         args = [kw.pop(_k[0]) for _k in self.signature]
         kw.update(self.kw)
         return self._numexpr(*args, **kw)
-
-
-def test_expression():
-    import numpy as np
-    size = (100, 100)
-    y0 = np.ones(size, dtype=complex) + 1j
-    res = y0.copy()
-    ans = (np.sin(y0)**2 + 1j)/5.0
-    expr = Expression('(sin(y0)**2 + 1j)/5',
-                      dict(y0=complex), ex_uses_vml=True)
-    expr(y0=y0, out=res)
-    assert np.allclose(res, ans)
