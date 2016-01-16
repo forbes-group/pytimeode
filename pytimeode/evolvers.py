@@ -272,6 +272,9 @@ class EvolverABM(EvolverBase):
     def init(self):
         EvolverBase.init(self)
 
+        # Make sure that self.y is initialized before making copies...
+        getattr(self.y, 'pre_evolve_hook', lambda: None)()
+
         y0 = self.y
         dt = self.dt
 
