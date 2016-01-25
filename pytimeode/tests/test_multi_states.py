@@ -1,5 +1,5 @@
-import nose.tools as nt
 import numpy as np
+import pytest
 
 from mmfutils.interface import implements
 
@@ -80,33 +80,35 @@ class MultiStateDict(MultiStateMixin):
 
 
 class TestMultiStateMixin(object):
-    def setUp(self):
+    @classmethod
+    def setup_class(cls):
         s1 = State(N=2)
         s2 = State(N=3)
-        self.State = lambda : MultiState(data=[s1, s2])
+        cls.State = staticmethod(lambda: MultiState(data=[s1, s2]))
 
         shape1 = (s1.N,)*s1.dim
         shape2 = (s2.N,)*s2.dim
 
-        self.ns = [np.arange(s1.N**s1.dim).reshape(shape1),
-                   np.arange(s2.N**s2.dim).reshape(shape2)]
+        cls.ns = [np.arange(s1.N**s1.dim).reshape(shape1),
+                  np.arange(s2.N**s2.dim).reshape(shape2)]
 
-    @nt.raises(ValueError)
     def test_lock0(self):
         s = self.State()
         with s.lock:
-            s[0][...] = self.ns[0]
+            with pytest.raises(ValueError):
+                s[0][...] = self.ns[0]
 
-    @nt.raises(ValueError)
     def test_lock1(self):
         s = self.State()
         with s.lock:
-            s[1][...] = self.ns[1]
-    @nt.raises(ValueError)
+            with pytest.raises(ValueError):
+                s[1][...] = self.ns[1]
+
     def test_writable(self):
         s = self.State()
         s.writeable = False
-        s[0][...] = self.ns[0]
+        with pytest.raises(ValueError):
+            s[0][...] = self.ns[0]
 
     def test_copy(self):
         s = self.State()
@@ -115,7 +117,7 @@ class TestMultiStateMixin(object):
         s1 = s.copy()
         s *= 2
         for _k in s:
-            nt.ok_(np.allclose(s[_k], s1[_k]*2))
+            assert np.allclose(s[_k], s1[_k]*2)
 
     def test_copy_from(self):
         s = self.State()
@@ -125,7 +127,7 @@ class TestMultiStateMixin(object):
         s1.copy_from(s)
         s1 += s
         for _k in s:
-            nt.ok_(np.allclose(s[_k]*2, s1[_k]))
+            assert np.allclose(s[_k]*2, s1[_k])
 
     def test_evolve(self):
         y0 = self.State()
@@ -133,20 +135,20 @@ class TestMultiStateMixin(object):
         e.evolve(10)
         y = e.y
         t = e.t
-        nt.ok_(np.allclose(y[0], y0[0]*np.exp(-t)))
-        nt.ok_(np.allclose(y[1], y0[1]*np.exp(t)))
+        assert np.allclose(y[0], y0[0]*np.exp(-t))
+        assert np.allclose(y[1], y0[1]*np.exp(t))
 
     def test_array_interface(self):
         s = self.State()
 
         # This just makes a singleton array of the class s.
         a = np.asarray(s)
-        nt.ok_(a.ravel()[0] is s)
+        assert a.ravel()[0] is s
 
     def test_array_ops(self):
         def check(f, s):
             for _k in s:
-                nt.ok_(np.allclose(f, s[_k]))
+                assert np.allclose(f, s[_k])
 
         s1 = self.State()
         s2 = self.State()
@@ -191,16 +193,17 @@ class TestMultiStateMixin(object):
 
 
 class TestMultiStateDictMixin(object):
-    def setUp(self):
+    @classmethod
+    def setup_class(cls):
         s1 = State(N=2)
         s2 = State(N=3)
-        self.State = lambda : MultiStateDict(data=dict(a=s1, b=s2))
+        cls.State = staticmethod(lambda: MultiStateDict(data=dict(a=s1, b=s2)))
 
         shape1 = (s1.N,)*s1.dim
         shape2 = (s2.N,)*s2.dim
 
-        self.ns = dict(a=np.arange(s1.N**s1.dim).reshape(shape1),
-                       b=np.arange(s2.N**s2.dim).reshape(shape2))
+        cls.ns = dict(a=np.arange(s1.N**s1.dim).reshape(shape1),
+                      b=np.arange(s2.N**s2.dim).reshape(shape2))
 
     def test_copy(self):
         s = self.State()
@@ -209,7 +212,7 @@ class TestMultiStateDictMixin(object):
         s1 = s.copy()
         s *= 2
         for _k in s:
-            nt.ok_(np.allclose(s[_k], s1[_k]*2))
+            assert np.allclose(s[_k], s1[_k]*2)
 
     def test_copy_from(self):
         s = self.State()
@@ -219,7 +222,7 @@ class TestMultiStateDictMixin(object):
         s1.copy_from(s)
         s1 += s
         for _k in s:
-            nt.ok_(np.allclose(s[_k]*2, s1[_k]))
+            assert np.allclose(s[_k]*2, s1[_k])
 
     def test_evolve(self):
         y0 = self.State()
@@ -227,13 +230,13 @@ class TestMultiStateDictMixin(object):
         e.evolve(10)
         y = e.y
         t = e.t
-        nt.ok_(np.allclose(y['a'], y0['a']*np.exp(-t)))
-        nt.ok_(np.allclose(y['b'], y0['b']*np.exp(t)))
+        assert np.allclose(y['a'], y0['a']*np.exp(-t))
+        assert np.allclose(y['b'], y0['b']*np.exp(t))
 
     def test_array_ops(self):
         def check(f, s):
             for _k in s:
-                nt.ok_(np.allclose(f, s[_k]))
+                assert np.allclose(f, s[_k])
 
         s1 = self.State()
         s2 = self.State()

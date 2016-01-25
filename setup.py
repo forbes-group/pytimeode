@@ -16,7 +16,6 @@ Currently the codes only use fixed time-step method (not adaptive).
 import sys
 
 from setuptools import setup, find_packages
-from setuptools.command.test import test as original_test
 
 NAME = "pytimeode"
 
@@ -26,8 +25,14 @@ install_requires = [
     'zope.interface>=3.8.0'
 ]
 
+setup_requires = [
+    'pytest-runner'
+]
+
 test_requires = [
-    'nose>=1.3.6',
+    'pytest>=2.8.1',
+    'pytest-cov>=2.2.0',
+    'pytest-flake8',
     'coverage',
     'flake8',
     'pep8==1.5.7',     # Needed by flake8: dependency resolution issue if not pinned
@@ -41,37 +46,14 @@ for mod in sys.modules.keys():
 del mod
 
 
-class test(original_test):
-    description = "Run all tests and checks (customized for this project)"
-
-    def finalize_options(self):
-        # Don't actually run any "test" tests (we will use nosetest)
-        self.test_suit = None
-
-    def run(self):
-        # Call this to do complicated distribute stuff.
-        original_test.run(self)
-
-        for cmd in ['nosetests', 'flake8', 'check']:
-            try:
-                self.run_command(cmd)
-            except SystemExit, e:
-                if e.code:
-                    raise
-
 setup(name=NAME,
-      version='0.7dev',
+      version='0.7.0.dev0',
       packages=find_packages(exclude=['tests']),
-      cmdclass=dict(test=test),
 
       install_requires=install_requires,
+      setup_requires=setup_requires,
       tests_require=test_requires,
       extras_require={},
-      setup_requires=[],
-
-      dependency_links=[
-          'hg+https://bitbucket.org/mforbes/mmfutils@0.2#egg=mmfutils-0.2',
-      ],
 
       # Metadata
       author='Michael McNeil Forbes',

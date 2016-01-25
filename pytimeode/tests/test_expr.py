@@ -1,4 +1,3 @@
-import nose.tools as nt
 import numpy as np
 
 from ..utils import expr

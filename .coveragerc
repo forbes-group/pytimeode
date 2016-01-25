@@ -1,0 +1,4 @@
+[run]
+omit=
+[html]
+directory = build/_coverage

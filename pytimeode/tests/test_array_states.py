@@ -1,5 +1,5 @@
-import nose.tools as nt
 import numpy as np
+import pytest
 
 from mmfutils.interface import implements
 
@@ -73,30 +73,31 @@ class StatesDict(ArraysStateMixin):
 
 
 class TestArrayStateMixin(object):
-    def setUp(self):
-        self.State = State
-        s = self.State()
+    @classmethod
+    def setup_class(cls):
+        cls.State = State
+        s = cls.State()
         shape = (s.N,)*s.dim
-        self.n = np.arange(s.N**s.dim).reshape(shape)
+        cls.n = np.arange(s.N**s.dim).reshape(shape)
 
-    @nt.raises(ValueError)
     def test_lock(self):
         s = self.State()
-        with s.lock:
-            s[...] = self.n
+        with pytest.raises(ValueError):
+            with s.lock:
+                s[...] = self.n
 
-    @nt.raises(ValueError)
     def test_writable(self):
         s = self.State()
         s.writeable = False
-        s[...] = self.n
+        with pytest.raises(ValueError):
+            s[...] = self.n
 
     def test_copy(self):
         s = self.State()
         s[...] = self.n
         s1 = s.copy()
         s *= 2
-        nt.ok_(np.allclose(s.data, s1.data*2))
+        assert np.allclose(s.data, s1.data*2)
 
     def test_copy_from(self):
         s = self.State()
@@ -104,7 +105,7 @@ class TestArrayStateMixin(object):
         s1 = self.State()
         s1.copy_from(s)
         s1 += s
-        nt.ok_(np.allclose(s.data*2, s1.data))
+        assert np.allclose(s.data*2, s1.data)
 
     def test_evolve(self):
         y0 = self.State()
@@ -112,15 +113,15 @@ class TestArrayStateMixin(object):
         e.evolve(10)
         y = e.y
         t = e.t
-        nt.ok_(np.allclose(y.data, y0.data*np.exp(-t)))
+        assert np.allclose(y.data, y0.data*np.exp(-t))
 
     def test_array_interface(self):
         s = self.State()
-        nt.ok_(np.allclose(s.data, np.asarray(s)))
+        assert np.allclose(s.data, np.asarray(s))
 
     def test_array_ops(self):
         def check(f, s):
-            nt.ok_(np.allclose(f, s.data))
+            assert np.allclose(f, s.data)
 
         s1 = self.State()
         s2 = self.State()
@@ -168,35 +169,36 @@ class TestArrayStateMixin(object):
         s = self.State()
         s.__dict__['dtype'] = float
         s.data = s.data.astype(float)
-        nt.ok_(s.dtype is float)
+        assert s.dtype is float
         s.__dict__['dtype'] = complex
         s.data = s.data.astype(complex)
-        nt.ok_(s.dtype is complex)
+        assert s.dtype is complex
 
 
 class TestArrayStatesMixin(object):
-    def setUp(self):
-        self.State = States
-        s = self.State()
-        self.ns = [np.arange(len(s[_d])) for _d in s]
+    @classmethod
+    def setup_class(cls):
+        cls.State = States
+        s = cls.State()
+        cls.ns = [np.arange(len(s[_d])) for _d in s]
 
-    @nt.raises(ValueError)
     def test_lock0(self):
         s = self.State()
         with s.lock:
-            s[0][...] = self.ns[0]
+            with pytest.raises(ValueError):
+                s[0][...] = self.ns[0]
 
-    @nt.raises(ValueError)
     def test_lock1(self):
         s = self.State()
         with s.lock:
-            s[1][...] = self.ns[1]
+            with pytest.raises(ValueError):
+                s[1][...] = self.ns[1]
 
-    @nt.raises(ValueError)
     def test_writable(self):
         s = self.State()
         s.writeable = False
-        s[0][...] = self.ns[0]
+        with pytest.raises(ValueError):
+            s[0][...] = self.ns[0]
 
     def test_copy(self):
         s = self.State()
@@ -205,7 +207,7 @@ class TestArrayStatesMixin(object):
         s1 = s.copy()
         s *= 2
         for _k in s:
-            nt.ok_(np.allclose(s[_k], s1[_k]*2))
+            assert np.allclose(s[_k], s1[_k]*2)
 
     def test_copy_from(self):
         s = self.State()
@@ -215,7 +217,7 @@ class TestArrayStatesMixin(object):
         s1.copy_from(s)
         s1 += s
         for _k in s:
-            nt.ok_(np.allclose(s[_k]*2, s1[_k]))
+            assert np.allclose(s[_k]*2, s1[_k])
 
     def test_evolve(self):
         y0 = self.State()
@@ -223,20 +225,20 @@ class TestArrayStatesMixin(object):
         e.evolve(10)
         y = e.y
         t = e.t
-        nt.ok_(np.allclose(y[0], y0[0]*np.exp(-t)))
-        nt.ok_(np.allclose(y[1], y0[1]*np.exp(t)))
+        assert np.allclose(y[0], y0[0]*np.exp(-t))
+        assert np.allclose(y[1], y0[1]*np.exp(t))
 
     def test_array_interface(self):
         s = self.State()
 
         # This just makes a singleton array of the class s.
         a = np.asarray(s)
-        nt.ok_(a.ravel()[0] is s)
+        assert a.ravel()[0] is s
 
     def test_array_ops(self):
         def check(f, s):
             for _k in s:
-                nt.ok_(np.allclose(f, s[_k]))
+                assert np.allclose(f, s[_k])
 
         s1 = self.State()
         s2 = self.State()
@@ -285,18 +287,19 @@ class TestArrayStatesMixin(object):
         s.__dict__['dtype'] = float
         for _k in s:
             s.data[_k] = s.data[_k].astype(float)
-        nt.ok_(s.dtype is float)
+        assert s.dtype is float
         s.__dict__['dtype'] = complex
         for _k in s:
             s.data[_k] = s.data[_k].astype(complex)
-        nt.ok_(s.dtype is complex)
+        assert s.dtype is complex
 
 
 class TestArrayStatesDictMixin(object):
-    def setUp(self):
-        self.State = StatesDict
-        s = self.State()
-        self.ns = [np.arange(len(s[_d])) for _d in s]
+    @classmethod
+    def setup_class(cls):
+        cls.State = StatesDict
+        s = cls.State()
+        cls.ns = [np.arange(len(s[_d])) for _d in s]
 
     def test_copy(self):
         s = self.State()
@@ -305,7 +308,7 @@ class TestArrayStatesDictMixin(object):
         s1 = s.copy()
         s *= 2
         for _k in s:
-            nt.ok_(np.allclose(s[_k], s1[_k]*2))
+            assert np.allclose(s[_k], s1[_k]*2)
 
     def test_copy_from(self):
         s = self.State()
@@ -315,7 +318,7 @@ class TestArrayStatesDictMixin(object):
         s1.copy_from(s)
         s1 += s
         for _k in s:
-            nt.ok_(np.allclose(s[_k]*2, s1[_k]))
+            assert np.allclose(s[_k]*2, s1[_k])
 
     def test_evolve(self):
         y0 = self.State()
@@ -323,13 +326,13 @@ class TestArrayStatesDictMixin(object):
         e.evolve(10)
         y = e.y
         t = e.t
-        nt.ok_(np.allclose(y['a'], y0['a']*np.exp(-t)))
-        nt.ok_(np.allclose(y['b'], y0['b']*np.exp(t)))
+        assert np.allclose(y['a'], y0['a']*np.exp(-t))
+        assert np.allclose(y['b'], y0['b']*np.exp(t))
 
     def test_array_ops(self):
         def check(f, s):
             for _k in s:
-                nt.ok_(np.allclose(f, s[_k]))
+                assert np.allclose(f, s[_k])
 
         s1 = self.State()
         s2 = self.State()

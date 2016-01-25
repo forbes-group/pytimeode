@@ -331,7 +331,7 @@ class EvolverABM(EvolverBase):
                 # values to use.
                 self.dcps = [0*_y for _y in self.ys]
         else:
-            #self.do_step_ABM()
+            # self.do_step_ABM()
             self.do_step_ABM_numexpr()
 
         # This should be atomic, not an array otherwise one might accumulate a
@@ -365,7 +365,7 @@ class EvolverABM(EvolverBase):
             k[0] = dy * h
             k[1] = (self.get_dy(y + k[0]/2., t=t + h/2.)) * h
             k[2] = (self.get_dy(y + k[1]/2., t=t + h/2.)) * h
-            k[3] = (self.get_dy(y + k[2],    t=t + h)) * h
+            k[3] = (self.get_dy(y + k[2], t=t + h)) * h
             y += (k[0] + 2*k[1] + 2*k[2] + k[3])/6.0
             del k
         elif False:             # pragma: no cover
