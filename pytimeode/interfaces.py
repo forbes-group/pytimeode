@@ -296,17 +296,23 @@ class StateMixin(object):
     def empty(self):
         return self.copy()
 
-    @property
-    def writable(self):
-        """Common spelling of `writeable`.  Disable with useful error message."""
-        raise AttributeError(
-            "Cannot get attribute `writable`.  Did you mean `writeable`?")
+    # Here we disable `writeable with a useful error message.  This is
+    # a common misspelling that does not agree with our interface.  We
+    # do this in __getattr__ rather than with a property so that it
+    # does not appear when tab completing.
+    _disabled_attributes = set(['writable'])
 
-    @writable.setter
-    def writable(self, value):
-        """Common spelling of `writeable`.  Disable with useful error message."""
-        raise AttributeError(
-            "Cannot set attribute `writable`.  Did you mean `writeable`?")
+    def __getattr__(self, name):
+        if name in self._disabled_attributes:
+            raise AttributeError(
+                "Cannot get attribute `writable`.  Did you mean `writeable`?")
+        raise AttributeError
+
+    def __setattr__(self, name, value):
+        if name in self._disabled_attributes:
+            raise AttributeError(
+                "Cannot set attribute `writable`.  Did you mean `writeable`?")
+        super(StateMixin, self).__setattr__(name, value)
 
 
 class StatesMixin(object):
