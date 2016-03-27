@@ -99,6 +99,28 @@ class TestArrayStateMixin(object):
         s *= 2
         assert np.allclose(s.data, s1.data*2)
 
+        # Regression test for issue 10
+        for writeable in [True, False]:
+            s.writeable = writeable
+            assert s.writeable == writeable
+            s1 = s.copy()
+            assert s.writeable == writeable
+
+    def test_empty(self):
+        s = self.State()
+        s[...] = self.n
+        s1 = s.empty()
+        s1[...] = s[...]
+        s *= 2
+        assert np.allclose(s.data, s1.data*2)
+
+        # Regression test for issue 10
+        for writeable in [True, False]:
+            s.writeable = writeable
+            assert s.writeable == writeable
+            s1 = s.empty()
+            assert s.writeable == writeable
+
     def test_copy_from(self):
         s = self.State()
         s[...] = self.n
@@ -209,6 +231,17 @@ class TestArrayStatesMixin(object):
         for _k in s:
             assert np.allclose(s[_k], s1[_k]*2)
 
+    def test_empty(self):
+        s = self.State()
+        for _n, _k in enumerate(s):
+            s[_k][...] = self.ns[_n]
+        s1 = s.empty()
+        for _k in s:
+            s1[_k][...] = s[_k]
+        s *= 2
+        for _k in s:
+            assert np.allclose(s[_k], s1[_k]*2)
+
     def test_copy_from(self):
         s = self.State()
         for _n, _k in enumerate(s):
@@ -306,6 +339,17 @@ class TestArrayStatesDictMixin(object):
         for _n, _k in enumerate(s):
             s[_k][...] = self.ns[_n]
         s1 = s.copy()
+        s *= 2
+        for _k in s:
+            assert np.allclose(s[_k], s1[_k]*2)
+
+    def test_empty(self):
+        s = self.State()
+        for _n, _k in enumerate(s):
+            s[_k][...] = self.ns[_n]
+        s1 = s.empty()
+        for _k in s:
+            s1[_k][...] = s[_k]
         s *= 2
         for _k in s:
             assert np.allclose(s[_k], s1[_k]*2)
