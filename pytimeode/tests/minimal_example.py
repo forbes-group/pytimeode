@@ -35,7 +35,7 @@ class State(interfaces.StateMixin):
 
     def copy(self):
         y = copy.copy(self)
-        y.writeable = True      # Copies should be writable
+        y.writeable = True      # Copies should be writeable
         y.data = self.data.copy()
         return y
 

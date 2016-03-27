@@ -82,4 +82,14 @@ class TestInterfacesDoctests(object):
     >>> s = State()
     >>> verifyObject(IStateForABMEvolvers, s)
     True
+
+    >>> s.writable
+    Traceback (most recent call last):
+       ...
+    AttributeError: Cannot get attribute `writable`.  Did you mean `writeable`?
+
+    >>> s.writable = False
+    Traceback (most recent call last):
+       ...
+    AttributeError: Cannot set attribute `writable`.  Did you mean `writeable`?
     """

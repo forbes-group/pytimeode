@@ -86,7 +86,7 @@ class TestArrayStateMixin(object):
             with s.lock:
                 s[...] = self.n
 
-    def test_writable(self):
+    def test_writeable(self):
         s = self.State()
         s.writeable = False
         with pytest.raises(ValueError):
@@ -216,7 +216,7 @@ class TestArrayStatesMixin(object):
             with pytest.raises(ValueError):
                 s[1][...] = self.ns[1]
 
-    def test_writable(self):
+    def test_writeable(self):
         s = self.State()
         s.writeable = False
         with pytest.raises(ValueError):
@@ -249,8 +249,7 @@ class TestArrayStatesMixin(object):
         s1 = self.State()
         s1.copy_from(s)
         s1 += s
-        for _k in s:
-            assert np.allclose(s[_k]*2, s1[_k])
+        assert all([np.allclose(s[_k]*2, s1[_k]) for _k in s])
 
     def test_evolve(self):
         y0 = self.State()
@@ -361,8 +360,7 @@ class TestArrayStatesDictMixin(object):
         s1 = self.State()
         s1.copy_from(s)
         s1 += s
-        for _k in s:
-            assert np.allclose(s[_k]*2, s1[_k])
+        assert all([np.allclose(s[_k]*2, s1[_k]) for _k in s])
 
     def test_evolve(self):
         y0 = self.State()

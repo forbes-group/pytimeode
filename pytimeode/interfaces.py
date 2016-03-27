@@ -296,6 +296,18 @@ class StateMixin(object):
     def empty(self):
         return self.copy()
 
+    @property
+    def writable(self):
+        """Common spelling of `writeable`.  Disable with useful error message."""
+        raise AttributeError(
+            "Cannot get attribute `writable`.  Did you mean `writeable`?")
+
+    @writable.setter
+    def writable(self, value):
+        """Common spelling of `writeable`.  Disable with useful error message."""
+        raise AttributeError(
+            "Cannot set attribute `writable`.  Did you mean `writeable`?")
+
 
 class StatesMixin(object):
     """Mixin for states with a collection (Sequence or Mapping) of data.
@@ -361,7 +373,7 @@ class StatesMixin(object):
             dtype = self.__dict__['dtype']
         else:
             dtype = self[self.__iter__().next()].dtype
-        assert np.all([dtype == self[_k].dtype for _k in self])
+        assert all(dtype == self[_k].dtype for _k in self)
         return dtype
 
     @property
@@ -369,8 +381,13 @@ class StatesMixin(object):
         """Set to `True` if the state is writeable, or `False` if the state
         should only be read.
         """
-        return np.all(getattr(self[key], 'writable', self[key].flags.writeable)
-                      for key in self)
+        # We we carefully use short-circuiting so that
+        # self[key].flags.writeable is only evaluated if 'writeable'
+        # is not found.
+        return all(
+            (self[key] if hasattr(self[key], 'writeable') else self[key].flags)
+            .writeable
+            for key in self)
 
     @writeable.setter
     def writeable(self, value):
@@ -423,8 +440,8 @@ class ArrayStateMixin(StateMixin):
         copy the data.
         """
         y = copy.copy(self)
-        y.writeable = True      # Copies should be writeable
         y.data = copy.deepcopy(self.data)
+        y.writeable = True      # Copies should be writeable
         return y
 
     def copy_from(self, y):
@@ -436,8 +453,8 @@ class ArrayStateMixin(StateMixin):
     def empty(self):
         """Return an uninitialized copy of the state."""
         y = copy.copy(self)
-        y.writeable = True      # Copies should be writeable
         y.data = np.empty_like(self.data)
+        y.writeable = True      # Copies should be writeable
         return y
 
     def axpy(self, x, a=1):

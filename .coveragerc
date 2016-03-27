@@ -1,4 +1,4 @@
 [run]
-omit=
+omit = pytimeode/tests/*
 [html]
 directory = build/_coverage
