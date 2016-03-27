@@ -104,7 +104,7 @@ class TestMultiStateMixin(object):
             with pytest.raises(ValueError):
                 s[1][...] = self.ns[1]
 
-    def test_writable(self):
+    def test_writeable(self):
         s = self.State()
         s.writeable = False
         with pytest.raises(ValueError):
@@ -116,8 +116,24 @@ class TestMultiStateMixin(object):
             s[_k][...] = self.ns[_n]
         s1 = s.copy()
         s *= 2
+        assert all([np.allclose(s[_k], s1[_k]*2) for _k in s])
+
+        # Regression test for issue 10
+        for writeable in [True, False]:
+            s.writeable = writeable
+            assert s.writeable == writeable
+            s1 = s.copy()
+            assert s.writeable == writeable
+
+    def test_empty(self):
+        s = self.State()
+        for _n, _k in enumerate(s):
+            s[_k][...] = self.ns[_n]
+        s1 = s.empty()
         for _k in s:
-            assert np.allclose(s[_k], s1[_k]*2)
+            s1[_k][...] = s[_k]
+        s *= 2
+        assert all([np.allclose(s[_k], s1[_k]*2) for _k in s])
 
     def test_copy_from(self):
         s = self.State()
@@ -126,8 +142,7 @@ class TestMultiStateMixin(object):
         s1 = self.State()
         s1.copy_from(s)
         s1 += s
-        for _k in s:
-            assert np.allclose(s[_k]*2, s1[_k])
+        assert all([np.allclose(s[_k]*2, s1[_k]) for _k in s])
 
     def test_evolve(self):
         y0 = self.State()
@@ -214,6 +229,16 @@ class TestMultiStateDictMixin(object):
         for _k in s:
             assert np.allclose(s[_k], s1[_k]*2)
 
+    def test_empty(self):
+        s = self.State()
+        for _k in s:
+            s[_k][...] = self.ns[_k]
+        s1 = s.empty()
+        for _k in s:
+            s1[_k][...] = s[_k]
+        s *= 2
+        assert all([np.allclose(s[_k], s1[_k]*2) for _k in s])
+
     def test_copy_from(self):
         s = self.State()
         for _k in s:
@@ -221,8 +246,7 @@ class TestMultiStateDictMixin(object):
         s1 = self.State()
         s1.copy_from(s)
         s1 += s
-        for _k in s:
-            assert np.allclose(s[_k]*2, s1[_k])
+        assert all([np.allclose(s[_k]*2, s1[_k]) for _k in s])
 
     def test_evolve(self):
         y0 = self.State()
