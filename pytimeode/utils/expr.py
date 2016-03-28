@@ -94,9 +94,26 @@ class Expression(object):
         _onejay = sympy.S('_onejay')
         sexpr = sympy.S(expr).subs(constants).evalf()
         if simplify:
-            sexpr = sympy.simplify(sexpr).subs(sympy.I, _onejay)
+            sexpr = sympy.simplify(sexpr)
 
-        expr = str(sexpr).replace('Abs(', 'abs(')
+        F = sympy.Function
+        sexpr = sexpr.subs([
+            (sympy.I, _onejay),
+            (sympy.Abs, F('abs')),
+            (sympy.re, F('real')),
+            (sympy.im, F('imag')),
+            (sympy.acos, F('arccos')),
+            (sympy.acosh, F('arccosh')),
+            (sympy.asin, F('arcsin')),
+            (sympy.asinh, F('arcsinh')),
+            (sympy.atan, F('arctan')),
+            (sympy.atan2, F('arctan2')),
+            (sympy.atanh, F('arctanh')),
+            (sympy.ln, F('log')),
+        ])
+
+        expr = str(sexpr)
+
         if '_onejay' in expr:
             signature.append(('_onejay', complex))
 
