@@ -135,6 +135,16 @@ class TestMultiStateMixin(object):
         s *= 2
         assert all([np.allclose(s[_k], s1[_k]*2) for _k in s])
 
+    def test_zeros(self):
+        s = self.State()
+        for _n, _k in enumerate(s):
+            s[_k][...] = self.ns[_n]
+        s0 = s.copy()
+        s1 = s.zeros()
+        s *= 2
+        assert all([np.allclose(0, s1[_k]) for _k in s])
+        assert all([np.allclose(s[_k], s0[_k]*2) for _k in s])
+
     def test_copy_from(self):
         s = self.State()
         for _n, _k in enumerate(s):
@@ -238,6 +248,16 @@ class TestMultiStateDictMixin(object):
             s1[_k][...] = s[_k]
         s *= 2
         assert all([np.allclose(s[_k], s1[_k]*2) for _k in s])
+
+    def test_zeros(self):
+        s = self.State()
+        for _k in s:
+            s[_k][...] = self.ns[_k]
+        s0 = s.copy()
+        s1 = s.zeros()
+        s *= 2
+        assert all([np.allclose(0, s1[_k]) for _k in s])
+        assert all([np.allclose(s[_k], s0[_k]*2) for _k in s])
 
     def test_copy_from(self):
         s = self.State()

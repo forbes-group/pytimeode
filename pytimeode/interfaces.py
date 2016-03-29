@@ -122,6 +122,13 @@ class IState(IStateMinimal):
         able to make a faster version if the data does not need to be copied.
         """
 
+    def zeros():
+        """Return a writeable but zeroed out copy of the state.
+
+        Can be implemented with `self.copy()` but some states might be
+        able to make a faster version if the data does not need to be copied.
+        """
+
 
 class INumexpr(Interface):
     """Allows for numexpr optimizations"""
@@ -296,6 +303,11 @@ class StateMixin(object):
     def empty(self):
         return self.copy()
 
+    def zeros(self):
+        res = self.empty()
+        res[...] = 0
+        return res
+
     # Here we disable `writeable with a useful error message.  This is
     # a common misspelling that does not agree with our interface.  We
     # do this in __getattr__ rather than with a property so that it
@@ -463,6 +475,13 @@ class ArrayStateMixin(StateMixin):
         y.writeable = True      # Copies should be writeable
         return y
 
+    def zeros(self):
+        """Return an uninitialized copy of the state."""
+        y = copy.copy(self)
+        y.data = np.zeros_like(self.data)
+        y.writeable = True      # Copies should be writeable
+        return y
+
     def axpy(self, x, a=1):
         """Perform `self += a*x` as efficiently as possible."""
         assert self.writeable
@@ -535,6 +554,14 @@ class ArraysStateMixin(StatesMixin, ArrayStateMixin):
             y[key] = np.empty_like(self[key])
         return y
 
+    def zeros(self):
+        """Return an uninitialized copy of the state."""
+        y = copy.copy(self)
+        y.data = copy.copy(self.data)
+        for key in self:
+            y[key] = np.zeros_like(self[key])
+        return y
+
     def copy_from(self, y):
         """Set this state to be a copy of the state `y`"""
         assert self.writeable
@@ -584,4 +611,12 @@ class MultiStateMixin(ArraysStateMixin):
         y.data = copy.copy(self.data)
         for key in self:
             y[key] = self[key].empty()
+        return y
+
+    def zeros(self):
+        """Return an uninitialized copy of the state."""
+        y = copy.copy(self)
+        y.data = copy.copy(self.data)
+        for key in self:
+            y[key] = self[key].zeros()
         return y
