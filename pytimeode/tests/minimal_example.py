@@ -25,7 +25,6 @@ class State(interfaces.StateMixin):
     interface.implements(interfaces.IStateForABMEvolvers)
 
     writeable = True
-    potentials = None
 
     def __init__(self, t=1.0, data=[1.0, 0.0]):
         """Not part of the interface"""
@@ -35,8 +34,8 @@ class State(interfaces.StateMixin):
 
     def copy(self):
         y = copy.copy(self)
-        y.writeable = True      # Copies should be writeable
         y.data = self.data.copy()
+        y.writeable = True      # Copies should be writeable
         return y
 
     def copy_from(self, y):
@@ -54,18 +53,16 @@ class State(interfaces.StateMixin):
         self.data *= f
         self.data.dtype = float
 
-    def apply_V(self, t):
+    def apply_V(self):
         assert self.writeable
-        v_ext = -2.0*(t - 1.0)
+        v_ext = -2.0*(self.t - 1.0)
         self.data *= v_ext
 
-    def compute_dy(self, t, dy=None, potentials=None):
-        if dy is None:
-            dy = self.copy()
-        elif dy is not self:
+    def compute_dy(self, dy):
+        if dy is not self:
             dy.copy_from(self)
 
-        dy.apply_V(t=t)
+        dy.apply_V()
         dy *= -1j
         return dy
 

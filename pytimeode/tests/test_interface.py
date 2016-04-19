@@ -25,20 +25,16 @@ class State1(State0):
     """Broken State to test interface checking"""
     implements([IStateForABMEvolvers])
 
-    def compute_dy(self, dy=None):
-        # Missing argument t
-        if dy is None:
-            dy = self.copy()
-        dy.data[...] = -self.data
+    def compute_dy(self):
+        # Missing argument dy
+        self.data[...] = -self.data
 
 
 class State(State1):
     """Correct State to test interface checking"""
     implements([IStateForABMEvolvers])
 
-    def compute_dy(self, t=0.0, dy=None):
-        if dy is None:
-            dy = self.copy()
+    def compute_dy(self, dy):
         dy.data[...] = -self.data
 
 

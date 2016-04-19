@@ -20,7 +20,7 @@ class TestState(object):
     def __init__(self, state):
         self.state = state
 
-    def check_split_operator(self, normalize=False, t=0,
+    def check_split_operator(self, normalize=False,
                              atol=np.sqrt(_EPS), rtol=np.sqrt(_EPS),
                              dt=None, dir=0, rdy=1e-2):
         """Checks consistency between `compute_dy` and the split
@@ -39,9 +39,6 @@ class TestState(object):
            both methods have a consistent normalization scheme,
            especially with quantum mechanical problems where the
            different evolution schemes might differ by an overall phase.
-        t : float
-           Passed through to the evolver: Time at which to evaluate
-           the state.
         dt : float
            Initial step dt. The numerical differentiation scheme uses
            a Richardson extrapolation dividing dt successively by a
@@ -59,21 +56,23 @@ class TestState(object):
         y0 = self.state.copy()
         assert interface.verifyObject(interfaces.IStateForABMEvolvers, y0)
         assert interface.verifyObject(interfaces.IStateForSplitEvolvers, y0)
-        if not interface.verifyObject(interfaces.IStateWithNormalize, y0):
+        if not interfaces.IStateWithNormalize.providedBy(y0):
             if normalize:
                 raise ValueError(
                     "Can only set normalize=True if state y implements " +
                     "IStateWithNormalize")
-        elif normalize is None:
-            normalize = True
+        else:
+            assert interface.verifyObject(interfaces.IStateWithNormalize, y0)
+            if normalize is None:
+                normalize = True
 
         def f_split(dt):
-            evolver = EvolverSplit(y=y0, dt=dt/6.0, t=t, normalize=normalize)
+            evolver = EvolverSplit(y=y0, dt=dt/6.0, normalize=normalize)
             evolver.evolve(6)
             return np.asarray(evolver.y)
 
         def f_abm(dt):
-            evolver = EvolverABM(y=y0, dt=dt/6.0, t=t, normalize=normalize)
+            evolver = EvolverABM(y=y0, dt=dt/6.0, normalize=normalize)
             evolver.evolve(6)
             return np.asarray(evolver.y)
 
@@ -93,7 +92,7 @@ class TestState(object):
 
         dy_split = differentiate(f_split, h0=dt)
         dy_abm = differentiate(f_abm, h0=dt)
-        dy_exact = np.asarray(y0.compute_dy(t=t, dy=y0.empty()))
+        dy_exact = np.asarray(y0.compute_dy(dy=y0.empty()))
 
         errs = []
         for dy in [dy_split, dy_abm]:

@@ -31,16 +31,16 @@ class Test(object):
 
     def test_issue_9(self):
         y0 = State()
-        e = EvolverABM(y=y0, dt=0.01, t=y0.t)
+        e = EvolverABM(y=y0, dt=0.01)
         e.evolve(steps=100)
         print e.y._hook_called
 
-        # y = (e.y.data, self.y(t=e.t))
-        assert np.allclose(e.y.data, self.y(t=e.t))
+        # y = (e.y.data, self.y(t=e.ty.))
+        assert np.allclose(e.y.data, self.y(t=e.y.t))
 
     def test_issue_9_numexpr(self):
         y0 = StateNumexpr()
-        e = EvolverABM(y=y0, dt=0.01, t=y0.t)
+        e = EvolverABM(y=y0, dt=0.01)
         e.evolve(steps=100)
-        # y = (e.y.data, self.y(t=e.t))
-        assert np.allclose(e.y.data, self.y(t=e.t))
+        # y = (e.y.data, self.y(t=e.y.t))
+        assert np.allclose(e.y.data, self.y(t=e.y.t))

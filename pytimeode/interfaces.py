@@ -29,7 +29,7 @@ __all__ = ['IEvolver', 'IStateMinimal', 'IState', 'INumexpr',
 class IEvolver(Interface):
     """General interface for evolvers"""
     y = Attribute("y", "Current state")
-    t = Attribute("t", "Current time")
+    t = Attribute("t", "Current time (deprecated - used y.t instead)")
 
     def __init__(y, dt, t=0.0, copy=True):
         """Return an evolver starting with state `y` at time `t` and evolve
@@ -42,16 +42,22 @@ class IEvolver(Interface):
 class IStateMinimal(Interface):
     """Minimal interface required for state objects.  This will not satisfy all
     uses of a state."""
-    writeable = Attribute("writeable",
-                          """Set to `True` if the state is writeable, or
-                          `False` if the state should only be read.""")
+    writeable = Attribute(
+        "writeable",
+        """Set to `True` if the state is writeable, or `False` if the state
+        should only be read.""")
 
-    dtype = Attribute("dtype",
-                      """Return the dtype of the underlying state.  If this is
-                      real, then it is assumed that the states will always be
-                      real and certain optimizations may take place.""")
+    dtype = Attribute(
+        "dtype",
+        """Return the dtype of the underlying state.  If this is real, then it
+        is assumed that the states will always be real and certain
+        optimizations may take place.""")
 
-    t = Attribute("t", """Time at which state is valid.""")
+    t = Attribute(
+        "t",
+        """Time at which state is valid.  This is the time at which potentials
+        should be evaluated etc.  (It will be set by the evolvers before
+        calling the various functions like compute_dy().)""")
 
     def copy():
         """Return a writeable copy of the state."""
@@ -132,10 +138,11 @@ class IState(IStateMinimal):
 
 class INumexpr(Interface):
     """Allows for numexpr optimizations"""
-    dtype = Attribute("dtype",
-                      """Return the dtype of the underlying state.  If this is
-                      real, then it is assumed that the states will always be
-                      real and certain optimizations may take place.""")
+    dtype = Attribute(
+        "dtype",
+        """Return the dtype of the underlying state.  If this is real, then it
+        is assumed that the states will always be real and certain optimizations
+        may take place.""")
 
     def apply(expr, **kwargs):
         """Evaluate the expression using the arguments in ``kwargs`` and store
@@ -152,8 +159,8 @@ class IStateForABMEvolvers(IState):
     These evolvers are very general, requiring only the ability for the problem
     to compute $dy/dt$.
     """
-    def compute_dy(t, dy):
-        """Return `dy/dt` at time `t` using the memory in state `dy`."""
+    def compute_dy(dy):
+        """Return `dy/dt` at time `self.t` using the memory in state `dy`."""
 
 
 class IStateForSplitEvolvers(IState):
@@ -178,10 +185,10 @@ class IStateForSplitEvolvers(IState):
 
     linear = Attribute("linear", "Is the problem linear?")
 
-    def apply_exp_K(dt, t=None):
+    def apply_exp_K(dt):
         r"""Apply $e^{-i K dt}$ in place"""
 
-    def apply_exp_V(dt, state, t=None):
+    def apply_exp_V(dt, state):
         r"""Apply $e^{-i V dt}$ in place using `state` for any
         nonlinear dependence in V. (Linear problems should ignore
         `state`.)"""
@@ -196,10 +203,10 @@ class IStatePotentialsForSplitEvolvers(IStateForSplitEvolvers):
     much more complicated than the non-linear portion of the
     potential, hence only a separate copy of the potentials is maintained.
     """
-    def get_potentials(t):
-        """Return `potentials` at time `t`."""
+    def get_potentials():
+        """Return `potentials` at time `self.t`."""
 
-    def apply_exp_V(dt, potentials, t=None):
+    def apply_exp_V(dt, potentials):
         r"""Apply $e^{-i V dt}$ in place using `potentials`"""
 
 
@@ -304,8 +311,8 @@ class StateMixin(object):
         return self.copy()
 
     def zeros(self):
-        res = self.empty()
-        res[...] = 0
+        res = self.copy()
+        res.scale(0)
         return res
 
     # Here we disable `writeable with a useful error message.  This is

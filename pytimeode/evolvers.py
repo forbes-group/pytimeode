@@ -38,7 +38,11 @@ class EvolverBase(Object):
     """
     interface.implements(interfaces.IEvolver)
 
-    def __init__(self, y, dt, t=0.0, normalize=False, copy=True):
+    @property
+    def t(self):
+        return self.y.t
+
+    def __init__(self, y, dt, t=None, normalize=False, copy=True):
         r"""
         Parameter
         ---------
@@ -59,11 +63,12 @@ class EvolverBase(Object):
            If `True`, then first make a copy of the state.
         """
         self.y = y.copy() if copy else y
-        self.t = t
+        if t is not None:
+            self.y.t = t
         self.dt = dt
         self.normalize = normalize
         if self.normalize:
-            if not interface.verifyObject(interfaces.IStateWithNormalize, y):
+            if not interfaces.IStateWithNormalize.providedBy(y):
                 raise ValueError(
                     "Can only set normalize=True if state y implements " +
                     "IStateWithNormalize")
@@ -76,28 +81,33 @@ class EvolverBase(Object):
 
         Object.__init__(self)
 
-    def init(self):
-        self.y.t = self.t
-
     ######################################################################
     # Defaults:  Subclasses may want to overload these for performance.
     def get_dy(self, y=None, t=None, dy=None):
         r"""Return the `y'=dy/dt`.  This is used by ABM evolvers."""
-        if t is None:
-            t = self.t
         if y is None:
             y = self.get_y()
         if dy is None:
             dy = y.empty()
+        if t is not None:
+            t0 = y.t
+            dy.t = y.t = t
+        else:
+            t0 = None
+            dy.t = y.t
+
         with y.lock:
-            dy = y.compute_dy(t=t, dy=dy)
+            dy = y.compute_dy(dy=dy)
+
+        if t0 is not None:
+            y.t = t0
+
         return dy
 
     def evolve(self, steps=None, omega=None):
         r"""Evolve the system by `steps`."""
-        t0 = self.t
+        t0 = float(self.y.t)
         assert steps > 1
-
         getattr(self.y, 'pre_evolve_hook', lambda: None)()
 
         self.do_step(first=True)
@@ -106,8 +116,7 @@ class EvolverBase(Object):
             self.do_step()
 
         self.do_step(final=True)
-        assert np.allclose(self.t, t0 + steps * self.dt)
-        self.y.t = self.t
+        assert np.allclose(self.y.t, t0 + steps * self.dt)
 
         getattr(self.y, 'post_evolve_hook', lambda: None)()
 
@@ -130,7 +139,7 @@ class EvolverSplit(EvolverBase):
     Note that we need to include a factor of `degen` for the potential piece
     (this is already included in the kinetic pieces).
     """
-    def __init__(self, y, dt, t=0.0, copy=True, **kw):
+    def __init__(self, y, dt, t=None, copy=True, **kw):
         interface.verifyObject(interfaces.IStateForSplitEvolvers, y)
         EvolverBase.__init__(self, y=y, dt=dt, t=t, copy=copy, **kw)
         if y.linear:
@@ -160,14 +169,13 @@ class EvolverSplit(EvolverBase):
         potentials are applied at the midpoint times.  (During evolution, the
         times will be staggered.  This is corrected at the `final` step.)
         """
-        t = self.t
         dt = self.dt
         y = self.y
 
         if first:
             # First step with half of the kinetic energy
-            y.apply_exp_K(dt=dt/2, t=t)
-            t += 0.5*dt
+            y.apply_exp_K(dt=dt/2)
+            y.t += 0.5*dt
 
         # Here is the application of the potential.  We first take a full step
         # with the self-consistent potentials at the starting time, then we
@@ -176,44 +184,40 @@ class EvolverSplit(EvolverBase):
         # Compute and store V(t)
         if y.linear:
             # For linear problems, we can just evolve one full step.
-            y.apply_exp_V(dt=dt, state=None, t=t)  # full step with V(t)
+            y.apply_exp_V(dt=dt, state=None)  # full step with V(t)
         elif self.use_nonlinear_potentials:
             # Nonlinear problems with a get_potentials function
-            V = y.get_potentials(t=t)
-            y.apply_exp_V(dt=dt, t=t, potentials=V)    # full step with V(t)
+            V = y.get_potentials()
+            y.apply_exp_V(dt=dt, potentials=V)    # full step with V(t)
 
             # Compute and store V(t+dt)
-            V -= y.get_potentials(t=t+dt)   # V0 - V1
-            V *= -0.5                       # (V1 - V0)/2
+            y.t += dt
+            V -= y.get_potentials()   # V0 - V1
+            y.t -= dt
+            V *= -0.5                 # (V1 - V0)/2
 
             # Correct step
-            y.apply_exp_V(dt=dt, t=t, potentials=V)
+            y.apply_exp_V(dt=dt, potentials=V)
         else:
             # General non-linear problems require the temporary state.
             y1 = self._nonlinear_tmp_state
             y1.copy_from(y)
-            y1.apply_exp_V(dt=dt, t=t, state=y1)
+            y1.apply_exp_V(dt=dt, state=y1)
             y1.axpy(y)
             y1.scale(0.5)
             # Correct step
-            y.apply_exp_V(dt=dt, t=t, state=y1)
+            y.apply_exp_V(dt=dt, state=y1)
 
         if final:
             # Only half of K at the end
-            y.apply_exp_K(dt=dt/2, t=t)
-            t += 0.5*dt
+            y.apply_exp_K(dt=dt/2)
+            y.t += 0.5*dt
         else:
-            y.apply_exp_K(dt=dt, t=t)
-            t += dt
+            y.apply_exp_K(dt=dt)
+            y.t += dt
 
         if self.normalize:
             y.normalize()
-
-        # This should be a float, not a view of an array otherwise one might
-        # accumulate a bunch of times that are all the same since they refer to
-        # the same array.
-        y.t = t
-        self.t = float(t)
 
     def get_y(self):
         r"""Return a copy of the current `y`."""
@@ -245,7 +249,7 @@ class EvolverABM(EvolverBase):
       first (i.e. ``ys[0]``).
     """
 
-    def __init__(self, y, dt, t=0.0,
+    def __init__(self, y, dt, t=None,
                  mu=None, no_runge_kutta=False,
                  **kw):
         r"""
@@ -334,14 +338,10 @@ class EvolverABM(EvolverBase):
             # self.do_step_ABM()
             self.do_step_ABM_numexpr()
 
-        # This should be atomic, not an array otherwise one might accumulate a
-        # bunch of times that are all the same.
-        self.t = float(self.t)
-
     def do_step_runge_kutta(self):
         r"""4th order Runge Kutta for the first four steps to populate the
         predictor/corrector arrays."""
-        t = self.t
+        t = float(self.y.t)
         h = self.dt
         ys = self.ys
         dys = self.dys
@@ -349,7 +349,7 @@ class EvolverABM(EvolverBase):
         y = self.ys[0].copy()
         if len(self.dys) < len(self.ys):
             # Need to compute dy
-            dy = self.get_dy(y=y, t=self.t)
+            dy = self.get_dy(y=y)
             dys.insert(0, dy)
         else:
             dy = self.dys[0]
@@ -406,15 +406,15 @@ class EvolverABM(EvolverBase):
         if self.normalize:
             y.normalize()
 
-        self.t += h
-        dy = self.get_dy(y=y, t=self.t)
+        y.t += h
+        dy = self.get_dy(y=y)
 
         ys.insert(0, y)
         dys.insert(0, dy)
 
     def do_step_ABM(self):
         r"""Perform one step of the ABM method."""
-        t = self.t
+        t = float(self.y.t)
         dt = self.dt
         ys = self.ys            # Slightly faster to make these local
         dcps = self.dcps
@@ -423,6 +423,7 @@ class EvolverABM(EvolverBase):
         # Remove array from the end.  We will use this for the modifier, and
         # then finally for the new y
         y = ys.pop()
+        y.t = t
 
         y *= 0.5
         y.axpy(x=ys[0], a=0.5)
@@ -441,10 +442,10 @@ class EvolverABM(EvolverBase):
         y.axpy(x=dcp, a=1)
         y.axpy(x=dcps[0], a=-1)
 
-        t += dt
+        y.t += dt
 
         dy = dys.pop()
-        dy = self.get_dy(y=y, t=t, dy=dy)
+        dy = self.get_dy(y=y, dy=dy)
 
         if self.normalize:
             y.normalize()
@@ -452,14 +453,13 @@ class EvolverABM(EvolverBase):
         ys.insert(0, y)
         dys.insert(0, dy)
         dcps.insert(0, dcp)
-        self.t = t
 
     def do_step_ABM_numexpr(self):
         r"""Perform one step of the ABM method.  This version uses numexpr."""
         if not self.numexpr:
             return self.do_step_ABM()
 
-        t = self.t
+        t = float(self.y.t)
         dt = self.dt
         ys = self.ys            # Slightly faster to make these local
         dcps = self.dcps
@@ -468,6 +468,7 @@ class EvolverABM(EvolverBase):
         # Remove array from the end.  We will use this for the modifier, and
         # the finally for the new y
         y0 = ys.pop()
+        y0.t = t
         m = dcps.pop()
         m.apply(self._expr_m,
                 y0=y0, y1=ys[0], dy0=dys[0], dy1=dys[1], dy2=dys[2],
@@ -493,15 +494,14 @@ class EvolverABM(EvolverBase):
         self._tmp = m
         del m
 
-        t += dt
+        y.t = t + dt
 
         dy = dys.pop()
-        dy = self.get_dy(y=y, t=t, dy=dy)
+        dy = self.get_dy(y=y, dy=dy)
 
         ys.insert(0, y)
         dys.insert(0, dy)
         dcps.insert(0, dcp)
-        self.t = t
 
     @property
     def y(self):
