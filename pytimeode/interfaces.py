@@ -16,10 +16,14 @@ import numpy as np
 from mmfutils.interface import (implements, Interface, Attribute)
 
 __all__ = ['IEvolver', 'IStateMinimal', 'IState', 'INumexpr',
-           'IStateForABMEvolvers', 'IStateForSplitEvolvers',
+           'IStateForABMEvolvers',
+           'IStateForSplitEvolvers',
+           'IStatePotentialsForSplitEvolvers',
            'IStateWithNormalize',
            'StateMixin', 'ArrayStateMixin', 'ArraysStateMixin',
-           'MultiStateMixin']
+           'MultiStateMixin',
+           'implements'
+           ]
 
 
 class IEvolver(Interface):
@@ -111,6 +115,20 @@ class IState(IStateMinimal):
     def __div__(f):
         """Return `self / y`"""
 
+    def empty():
+        """Return a writeable but uninitialized copy of the state.
+
+        Can be implemented with `self.copy()` but some states might be
+        able to make a faster version if the data does not need to be copied.
+        """
+
+    def zeros():
+        """Return a writeable but zeroed out copy of the state.
+
+        Can be implemented with `self.copy()` but some states might be
+        able to make a faster version if the data does not need to be copied.
+        """
+
 
 class INumexpr(Interface):
     """Allows for numexpr optimizations"""
@@ -134,12 +152,8 @@ class IStateForABMEvolvers(IState):
     These evolvers are very general, requiring only the ability for the problem
     to compute $dy/dt$.
     """
-    def compute_dy(t, dy=None):
-        """Return `dy/dt` at time `t`.
-
-        If `dy` is provided, then use it for the result, otherwise return a new
-        state.
-        """
+    def compute_dy(t, dy):
+        """Return `dy/dt` at time `t` using the memory in state `dy`."""
 
 
 class IStateForSplitEvolvers(IState):
@@ -149,18 +163,44 @@ class IStateForSplitEvolvers(IState):
     (kinetic energy) and $V$ (potential energy) so that $i dy/dt = (K+V)y$.
     The method requires that each of these operators be exponentiated.  The
     approach uses a Trotter decomposition that provides higher order accuracy,
-    but requires evaluation of the potentials at an intermediate time.  The
-    ``get_potentials()`` method must therefore be able to compute the
-    potentials at a specified time which might lie at a half-step.
+    but requires evaluation of the potentials at an intermediate time.
+
+    This interface requires that the `apply_exp_V()` method accept
+    another state object which should be used for calculating any
+    non-linear terms in $V$ which are state dependent.
+
+    If your problem is linear (i.e. $V$ depends only on time, not on
+    the state as in the case of the usual linear Schrodinger
+    equation), then you should set the linear attribute which will
+    improve performance (but do not use this for non-linear problems
+    or the order of convergence will be reduced).
+    """
+
+    linear = Attribute("linear", "Is the problem linear?")
+
+    def apply_exp_K(dt, t=None):
+        r"""Apply $e^{-i K dt}$ in place"""
+
+    def apply_exp_V(dt, state, t=None):
+        r"""Apply $e^{-i V dt}$ in place using `state` for any
+        nonlinear dependence in V. (Linear problems should ignore
+        `state`.)"""
+
+
+class IStatePotentialsForSplitEvolvers(IStateForSplitEvolvers):
+    r"""Interface required by Split Operator evolvers.
+
+    This is a specialization of `IStateForSplitEvolvers` that uses an
+    alternative method `get_potentials()` to compute the non-linear
+    portion of the potential. It is intended for use when the state is
+    much more complicated than the non-linear portion of the
+    potential, hence only a separate copy of the potentials is maintained.
     """
     def get_potentials(t):
         """Return `potentials` at time `t`."""
 
-    def apply_exp_K(dt, t=None):
-        r"""Apply $e^{i K dt}$ in place"""
-
-    def apply_exp_V(dt, t=None, potentials=None):
-        r"""Apply $e^{i V dt}$ in place"""
+    def apply_exp_V(dt, potentials, t=None):
+        r"""Apply $e^{-i V dt}$ in place using `potentials`"""
 
 
 class IStateWithNormalize(IState):
@@ -183,6 +223,8 @@ class IStateWithNormalize(IState):
 # methods required by the Minimal interfaces
 
 class StateMixin(object):
+    linear = False          # By default assume problems are nonlinear
+
     # Note: we could get away with __imul__ but it requires one return self
     # which can be a little confusing, so we allow the user to simply define
     # `axpy` and `scale` instead.
@@ -258,6 +300,32 @@ class StateMixin(object):
         finally:
             self.writeable = writeable
 
+    def empty(self):
+        return self.copy()
+
+    def zeros(self):
+        res = self.empty()
+        res[...] = 0
+        return res
+
+    # Here we disable `writeable with a useful error message.  This is
+    # a common misspelling that does not agree with our interface.  We
+    # do this in __getattr__ rather than with a property so that it
+    # does not appear when tab completing.
+    _disabled_attributes = set(['writable'])
+
+    def __getattr__(self, name):
+        if name in self._disabled_attributes:
+            raise AttributeError(
+                "Cannot get attribute `writable`.  Did you mean `writeable`?")
+        raise AttributeError
+
+    def __setattr__(self, name, value):
+        if name in self._disabled_attributes:
+            raise AttributeError(
+                "Cannot set attribute `writable`.  Did you mean `writeable`?")
+        super(StateMixin, self).__setattr__(name, value)
+
 
 class StatesMixin(object):
     """Mixin for states with a collection (Sequence or Mapping) of data.
@@ -268,6 +336,8 @@ class StatesMixin(object):
     assignment with ``x[...] = y``, and a ``flags.writeable`` attribute.)
     """
     implements([INumexpr])
+
+    linear = False          # By default assume problems are nonlinear
     data = None
 
     def __len__(self):
@@ -321,7 +391,7 @@ class StatesMixin(object):
             dtype = self.__dict__['dtype']
         else:
             dtype = self[self.__iter__().next()].dtype
-        assert np.all([dtype == self[_k].dtype for _k in self])
+        assert all(dtype == self[_k].dtype for _k in self)
         return dtype
 
     @property
@@ -329,8 +399,13 @@ class StatesMixin(object):
         """Set to `True` if the state is writeable, or `False` if the state
         should only be read.
         """
-        return np.all(getattr(self[key], 'writable', self[key].flags.writeable)
-                      for key in self)
+        # We we carefully use short-circuiting so that
+        # self[key].flags.writeable is only evaluated if 'writeable'
+        # is not found.
+        return all(
+            (self[key] if hasattr(self[key], 'writeable') else self[key].flags)
+            .writeable
+            for key in self)
 
     @writeable.setter
     def writeable(self, value):
@@ -352,7 +427,6 @@ class ArrayStateMixin(StateMixin):
     implements([INumexpr])
     t = 0.0
     data = None
-    potentials = None
 
     @property
     def writeable(self):
@@ -381,28 +455,32 @@ class ArrayStateMixin(StateMixin):
         """Return a copy of the state.
 
         Uses `copy.copy()` to shallow-copy attributes, and copy.deepcopy()` to
-        copy the data and potentials.
+        copy the data.
         """
         y = copy.copy(self)
-        y.writeable = True      # Copies should be writeable
         y.data = copy.deepcopy(self.data)
-        y.potentials = copy.deepcopy(self.potentials)
+        y.writeable = True      # Copies should be writeable
         return y
 
     def copy_from(self, y):
         """Set this state to be a copy of the state `y`"""
         assert self.writeable
-        args = {}
-        for key in ['data', 'potentials']:
-            y_array = getattr(y, key)
-            if key in self.__dict__:
-                args[key] = getattr(self, key)
-                if y_array is not None:
-                    args[key][...] = y_array
-            else:
-                args[key] = copy.deepcopy(y_array)
+        self[...] = y[...]
+        self.__dict__.update(y.__dict__, data=self.data)
 
-        self.__dict__.update(y.__dict__, **args)
+    def empty(self):
+        """Return an uninitialized copy of the state."""
+        y = copy.copy(self)
+        y.data = np.empty_like(self.data)
+        y.writeable = True      # Copies should be writeable
+        return y
+
+    def zeros(self):
+        """Return an uninitialized copy of the state."""
+        y = copy.copy(self)
+        y.data = np.zeros_like(self.data)
+        y.writeable = True      # Copies should be writeable
+        return y
 
     def axpy(self, x, a=1):
         """Perform `self += a*x` as efficiently as possible."""
@@ -460,23 +538,36 @@ class ArraysStateMixin(StatesMixin, ArrayStateMixin):
         """Return a copy of the state.
 
         Uses `copy.copy()` to shallow-copy attributes, and copy.deepcopy()` to
-        copy the data and potentials.
+        copy the data.
         """
         y = copy.copy(self)
         y.data = copy.deepcopy(self.data)
-        y.potentials = copy.deepcopy(self.potentials)
         for key in self:
             y[key][...] = self[key]
+        return y
+
+    def empty(self):
+        """Return an uninitialized copy of the state."""
+        y = copy.copy(self)
+        y.data = copy.copy(self.data)
+        for key in self:
+            y[key] = np.empty_like(self[key])
+        return y
+
+    def zeros(self):
+        """Return an uninitialized copy of the state."""
+        y = copy.copy(self)
+        y.data = copy.copy(self.data)
+        for key in self:
+            y[key] = np.zeros_like(self[key])
         return y
 
     def copy_from(self, y):
         """Set this state to be a copy of the state `y`"""
         assert self.writeable
-        data = self.data
         for key in self:
             self[key][...] = y[key]
-        args = dict(data=data, potentials=copy.deepcopy(y.potentials))
-        self.__dict__.update(y.__dict__, **args)
+        self.__dict__.update(y.__dict__, data=self.data)
 
     def axpy(self, x, a=1):
         """Perform `self += a*x` as efficiently as possible."""
@@ -513,3 +604,19 @@ class MultiStateMixin(ArraysStateMixin):
                     kw[_k] = kw[_k][key]
 
             self[key].apply(expr, **kw)
+
+    def empty(self):
+        """Return an uninitialized copy of the state."""
+        y = copy.copy(self)
+        y.data = copy.copy(self.data)
+        for key in self:
+            y[key] = self[key].empty()
+        return y
+
+    def zeros(self):
+        """Return an uninitialized copy of the state."""
+        y = copy.copy(self)
+        y.data = copy.copy(self.data)
+        for key in self:
+            y[key] = self[key].zeros()
+        return y
