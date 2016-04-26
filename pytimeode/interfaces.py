@@ -324,13 +324,15 @@ class StateMixin(object):
     def __getattr__(self, name):
         if name in self._disabled_attributes:
             raise AttributeError(
-                "Cannot get attribute `writable`.  Did you mean `writeable`?")
-        raise AttributeError
+                "Cannot get attribute `{}`.  Did you mean `writeable`?"
+                .format(name))
+        object.__getattribute__(self, name)
 
     def __setattr__(self, name, value):
         if name in self._disabled_attributes:
             raise AttributeError(
-                "Cannot set attribute `writable`.  Did you mean `writeable`?")
+                "Cannot set attribute `{}`.  Did you mean `writeable`?"
+                .format(name))
         super(StateMixin, self).__setattr__(name, value)
 
 
@@ -506,7 +508,10 @@ class ArrayStateMixin(StateMixin):
     def __repr__(self):
         """We can't really do this since we don't know the constructor.  We
         just show the data here."""
-        return "{}({})".format(self.__class__.__name__, repr(self.data))
+        return "{}(t={}, data={})".format(
+            self.__class__.__name__,
+            np.array2string(np.array([self.t]))[1:-1],  # Use numpy formatting
+            repr(self.data))
 
     @property
     def __array_interface__(self):
