@@ -13,7 +13,7 @@ from ..evolvers import EvolverABM
 class State(ArrayStateMixin):
     """
     >>> State(N=2, dim=1)
-    State(array([ 1.+0.j,  1.+0.j]))
+    State(t= 0., data=array([ 1.+0.j,  1.+0.j]))
     """
     implements([IStateForABMEvolvers])
 
@@ -30,8 +30,8 @@ class State(ArrayStateMixin):
 class States(ArraysStateMixin):
     """
     >>> States(N=2)
-    States([array([ 1.+0.j,  1.+0.j]),
-            array([ 1.+0.j,  1.+0.j,  1.+0.j, 1.+0.j])])
+    States(t= 0., data=[array([ 1.+0.j,  1.+0.j]),
+                        array([ 1.+0.j,  1.+0.j,  1.+0.j, 1.+0.j])])
     """
     implements([IStateForABMEvolvers])
 
@@ -49,8 +49,8 @@ class States(ArraysStateMixin):
 class StatesDict(ArraysStateMixin):
     """
     >>> StatesDict(N=2)
-    StatesDict({'a': array([ 1.+0.j,  1.+0.j]),
-                'b': array([ 1.+0.j,  1.+0.j,  1.+0.j,  1.+0.j])})
+    StatesDict(t= 0., data={'a': array([ 1.+0.j,  1.+0.j]),
+                            'b': array([ 1.+0.j,  1.+0.j,  1.+0.j,  1.+0.j])})
 
     """
     implements([IStateForABMEvolvers])

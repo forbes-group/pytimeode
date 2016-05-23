@@ -13,7 +13,7 @@ from ..evolvers import EvolverABM
 class State(ArrayStateMixin):
     """
     >>> State(N=2, dim=1)
-    State(array([ 1.+0.j,  1.+0.j]))
+    State(t= 0., data=array([ 1.+0.j,  1.+0.j]))
     """
     implements([IStateForABMEvolvers])
 
@@ -33,11 +33,14 @@ class MultiState(MultiStateMixin):
     >>> s2 = State(N=3)
     >>> s = MultiState(data=[s1, s2])
     >>> s
-    MultiState([State(array([[ 1.+0.j,  1.+0.j],
-                             [ 1.+0.j,  1.+0.j]])),
-                State(array([[ 1.+0.j,  1.+0.j,  1.+0.j],
-                             [ 1.+0.j,  1.+0.j,  1.+0.j],
-                             [ 1.+0.j,  1.+0.j,  1.+0.j]]))])
+    MultiState(t= 0.,
+               data=[State(t= 0.,
+                           data=array([[ 1.+0.j,  1.+0.j],
+                                       [ 1.+0.j,  1.+0.j]])),
+                     State(t= 0.,
+                           data=array([[ 1.+0.j,  1.+0.j,  1.+0.j],
+                                       [ 1.+0.j,  1.+0.j,  1.+0.j],
+                                       [ 1.+0.j,  1.+0.j,  1.+0.j]]))])
     """
     implements([IStateForABMEvolvers])
 
@@ -56,11 +59,14 @@ class MultiStateDict(MultiStateMixin):
     >>> b = State(N=3)
     >>> s = MultiStateDict(data=dict(a=a, b=b))
     >>> s
-    MultiStateDict({'a': State(array([[ 1.+0.j,  1.+0.j],
-                                      [ 1.+0.j,  1.+0.j]])),
-                    'b': State(array([[ 1.+0.j,  1.+0.j,  1.+0.j],
-                                      [ 1.+0.j,  1.+0.j,  1.+0.j],
-                                      [ 1.+0.j,  1.+0.j,  1.+0.j]]))})
+    MultiStateDict(t= 0.,
+                   data={'a': State(t= 0.,
+                                    data=array([[ 1.+0.j,  1.+0.j],
+                                                [ 1.+0.j,  1.+0.j]])),
+                         'b': State(t= 0.,
+                                    data=array([[ 1.+0.j,  1.+0.j,  1.+0.j],
+                                                [ 1.+0.j,  1.+0.j,  1.+0.j],
+                                                [ 1.+0.j,  1.+0.j,  1.+0.j]]))})
     """
     implements([IStateForABMEvolvers])
 

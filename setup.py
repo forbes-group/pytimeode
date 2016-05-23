@@ -19,15 +19,15 @@ from setuptools import setup, find_packages
 
 NAME = "pytimeode"
 
-install_requires = [
-    'mmf_setup',
-    'mmfutils>=0.4.3',
-    'persist>=0.9b2',
-    'zope.interface>=3.8.0'
-]
-
 setup_requires = [
     'pytest-runner'
+]
+
+install_requires = [
+    'mmf_setup',
+    'mmfutils>=0.4.7',
+    'persist>=0.9b2',
+    'zope.interface>=3.8.0'
 ]
 
 test_requires = [
@@ -51,8 +51,8 @@ setup(name=NAME,
       version='0.8.0.dev0',
       packages=find_packages(exclude=['tests']),
 
-      install_requires=install_requires,
       setup_requires=setup_requires,
+      install_requires=install_requires,
       tests_require=test_requires,
       extras_require={},
 

@@ -395,12 +395,12 @@ class StatesMixin(object):
     # Default methods using the __iter__() and __getitem__()
     @property
     def dtype(self):
-        # For now assume all arrays have same type
+        # For now assume first array has dtype
         if 'dtype' in self.__dict__:
             dtype = self.__dict__['dtype']
         else:
             dtype = self[self.__iter__().next()].dtype
-        assert all(dtype == self[_k].dtype for _k in self)
+        assert any(dtype == self[_k].dtype for _k in self)
         return dtype
 
     @property
