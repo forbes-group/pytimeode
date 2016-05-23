@@ -460,3 +460,18 @@ class TestArrayStatesDictMixin(object):
         s3 = s2 / 1.5
         f3 = f2 / 1.5
         check(f3, s3)
+
+    def test_issue_12(self):
+        """Check that only defined attributes can be set."""
+        s = self.State()
+
+        # Can assign data by copying
+        s['a'][...] = np.zeros(s['a'].shape)
+        s['b'][...] = np.zeros(s['b'].shape)
+        with pytest.raises(TypeError):
+            # Cannot set data
+            s['a'] = np.zeros(s['a'].shape)
+
+        with pytest.raises(TypeError):
+            # Cannot set arbitrary data
+            s['c'] = np.zeros(s['a'].shape)

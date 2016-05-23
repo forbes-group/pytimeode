@@ -366,7 +366,12 @@ class StatesMixin(object):
     # Requires these methods
     #
     # These default implementations assume self.data is a Sequence of Mapping,
-    # but can be overridden to support custom objects.
+    # but can be overridden to support custom objects.  Note: We do not provide
+    # a __setitem__ method because the user should not set items - instead they
+    # should be mutated since they may represent data on a GPU or elsewhere.
+    # Thus, usage should be `self[key][...] =` rather than `self[key] =`.  To
+    # actually manipulate the data such as when copying, access `self.data`
+    # directly.
     def __iter__(self):
         """Return the list of quantum numbers.
 
@@ -383,13 +388,6 @@ class StatesMixin(object):
         This version assumes `self.data` is either a Sequence or a Mapping.
         """
         return self.data[key]
-
-    def __setitem__(self, key, value):
-        """Set the data associated with `key`.
-
-        This version assumes `self.data` is either a Sequence or a Mapping.
-        """
-        self.data[key] = value
 
     ######################################################################
     # Default methods using the __iter__() and __getitem__()
@@ -554,8 +552,6 @@ class ArraysStateMixin(StatesMixin, ArrayStateMixin):
         """
         y = copy.copy(self)
         y.data = copy.deepcopy(self.data)
-        for key in self:
-            y[key][...] = self[key]
         return y
 
     def empty(self):
@@ -563,7 +559,7 @@ class ArraysStateMixin(StatesMixin, ArrayStateMixin):
         y = copy.copy(self)
         y.data = copy.copy(self.data)
         for key in self:
-            y[key] = np.empty_like(self[key])
+            y.data[key] = np.empty_like(self[key])
         return y
 
     def zeros(self):
@@ -571,7 +567,7 @@ class ArraysStateMixin(StatesMixin, ArrayStateMixin):
         y = copy.copy(self)
         y.data = copy.copy(self.data)
         for key in self:
-            y[key] = np.zeros_like(self[key])
+            y.data[key] = np.zeros_like(self[key])
         return y
 
     def copy_from(self, y):
@@ -594,6 +590,18 @@ class ArraysStateMixin(StatesMixin, ArrayStateMixin):
         assert self.writeable
         for key in self:
             self[key].__imul__(f)
+
+    def __setitem__(self, key, value):
+        """Disable direct setting of items - they should only be mutated.
+
+        If you *need* to set an item, manipulate `self.data` directly.
+        """
+        if key in self:
+            msg = ("Cannot set `state[{}]`. Did you mean `state[{}][...] = `?"
+                   .format(key, key))
+        else:
+            msg = "Cannot create new item `state[{}]`.".format(key)
+        raise TypeError(msg)
 
     @property
     def __array_interface__(self):
@@ -622,7 +630,7 @@ class MultiStateMixin(ArraysStateMixin):
         y = copy.copy(self)
         y.data = copy.copy(self.data)
         for key in self:
-            y[key] = self[key].empty()
+            y.data[key] = self[key].empty()
         return y
 
     def zeros(self):
@@ -630,5 +638,5 @@ class MultiStateMixin(ArraysStateMixin):
         y = copy.copy(self)
         y.data = copy.copy(self.data)
         for key in self:
-            y[key] = self[key].zeros()
+            y.data[key] = self[key].zeros()
         return y
