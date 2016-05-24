@@ -475,3 +475,7 @@ class TestArrayStatesDictMixin(object):
         with pytest.raises(TypeError):
             # Cannot set arbitrary data
             s['c'] = np.zeros(s['a'].shape)
+
+    def test_issue_13(self):
+        s = self.State()
+        assert len(s) == 2
