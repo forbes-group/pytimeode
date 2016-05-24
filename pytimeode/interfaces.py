@@ -350,7 +350,9 @@ class StatesMixin(object):
     data = None
 
     def __len__(self):
-        return len(list(self))
+        # Use a comprehension here because calling list(self) will call
+        # __len__() leading to an infinite loop.  Issue #13.
+        return len([_k for _k in self])
 
     def apply(self, expr, **kwargs):
         for _l in self:
@@ -606,7 +608,11 @@ class ArraysStateMixin(StatesMixin, ArrayStateMixin):
     @property
     def __array_interface__(self):
         """Allows states to act as arrays with ``np.asarray(state)``."""
-        raise NotImplementedError
+
+        # It is not simply enough to fail here - since we provide __len__()
+        # numpy will try to enumerate through the data.  We must be explicit -
+        # we want an array with a single element.
+        return dict(shape=(1,), typestr='O', version=3)
 
 
 class MultiStateMixin(ArraysStateMixin):
