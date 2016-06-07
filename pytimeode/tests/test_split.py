@@ -4,6 +4,7 @@ import numpy as np
 from scipy.linalg import expm
 
 from ..evolvers import EvolverABM
+from ..utils.testing import TestState
 from ..interfaces import (implements, IStateForABMEvolvers,
                           IStateForSplitEvolvers, ArrayStateMixin)
 
@@ -23,25 +24,23 @@ class State(ArrayStateMixin):
                    + 1j*np.random.random(N) - 0.5 - 0.5j)
         self.data = self.y0.copy()
 
-    def compute_dy(self, t, dy=None):
-        """Return `dy/dt` at time `t`.
+    def compute_dy(self, dy):
+        """Return `dy/dt` at time `self.t`.
 
         If `dy` is provided, then use it for the result, otherwise return a new
         state.
         """
-        if dy is None:
-            dy = self.copy()
         dy[...] = (self.K + self.V).dot(self[...])/1j
         return dy
 
-    def get_potentials(self, t):
-        """Return `potentials` at time `t`."""
+    def get_potentials(self):
+        """Return `potentials` at time `self.t`."""
 
-    def apply_exp_K(self, dt, t=None):
+    def apply_exp_K(self, dt):
         r"""Apply $e^{-i K dt}$ in place"""
         self[...] = expm(self.K/1j*dt).dot(self[...])
 
-    def apply_exp_V(self, dt, t=None, potentials=None):
+    def apply_exp_V(self, dt, state):
         r"""Apply $e^{-i V dt}$ in place"""
         self[...] = expm(self.V/1j*dt).dot(self[...])
 
@@ -58,14 +57,19 @@ class Test(object):
 
     def test_no_numexpr(self):
         y0 = minimal_example.State()
-        e = EvolverABM(y=y0, dt=0.01, t=y0.t)
+        e = EvolverABM(y=y0, dt=0.01)
         e.evolve(steps=100)
-        # y = (e.y.data, self.y(t=e.t))
-        nt.ok_(np.allclose(e.y.data, self.y(t=e.t)))
+        # y = (e.y.data, self.y(t=e.y.t))
+        nt.ok_(np.allclose(e.y.data, self.y(t=e.y.t)))
 
     def test_numexpr(self):
         y0 = minimal_example.StateNumexpr()
-        e = EvolverABM(y=y0, dt=0.01, t=y0.t)
+        e = EvolverABM(y=y0, dt=0.01)
         e.evolve(steps=100)
-        # y = (e.y.data, self.y(t=e.t))
-        nt.ok_(np.allclose(e.y.data, self.y(t=e.t)))
+        # y = (e.y.data, self.y(t=e.y.t))
+        nt.ok_(np.allclose(e.y.data, self.y(t=e.y.t)))
+
+    def test_testing(self):
+        y = State()
+        t = TestState(y)
+        assert all(t.check_split_operator())

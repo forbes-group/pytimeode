@@ -19,14 +19,13 @@ from setuptools import setup, find_packages
 
 NAME = "pytimeode"
 
-install_requires = [
-    'mmfutils>=0.4.3',
-    'persist>=0.9b2',
-    'zope.interface>=3.8.0'
-]
-
 setup_requires = [
     'pytest-runner'
+]
+
+install_requires = [
+    'mmfutils>=0.4.8',
+    'zope.interface>=3.8.0'
 ]
 
 test_requires = [
@@ -38,6 +37,10 @@ test_requires = [
     'pep8==1.5.7',     # Needed by flake8: dependency resolution issue if not pinned
 ]
 
+extras_require = dict(
+    doc=['mmf_setup'],
+)
+
 # Remove NAME from sys.modules so that it gets covered in tests. See
 # http://stackoverflow.com/questions/11279096
 for mod in sys.modules.keys():
@@ -47,13 +50,13 @@ del mod
 
 
 setup(name=NAME,
-      version='0.7.0.dev0',
+      version='0.8.0',
       packages=find_packages(exclude=['tests']),
 
-      install_requires=install_requires,
       setup_requires=setup_requires,
+      install_requires=install_requires,
       tests_require=test_requires,
-      extras_require={},
+      extras_require=extras_require,
 
       # Metadata
       author='Michael McNeil Forbes',

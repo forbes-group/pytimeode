@@ -29,7 +29,7 @@ __all__ = ['IEvolver', 'IStateMinimal', 'IState', 'INumexpr',
 class IEvolver(Interface):
     """General interface for evolvers"""
     y = Attribute("y", "Current state")
-    t = Attribute("t", "Current time")
+    t = Attribute("t", "Current time (deprecated - used y.t instead)")
 
     def __init__(y, dt, t=0.0, copy=True):
         """Return an evolver starting with state `y` at time `t` and evolve
@@ -42,16 +42,22 @@ class IEvolver(Interface):
 class IStateMinimal(Interface):
     """Minimal interface required for state objects.  This will not satisfy all
     uses of a state."""
-    writeable = Attribute("writeable",
-                          """Set to `True` if the state is writeable, or
-                          `False` if the state should only be read.""")
+    writeable = Attribute(
+        "writeable",
+        """Set to `True` if the state is writeable, or `False` if the state
+        should only be read.""")
 
-    dtype = Attribute("dtype",
-                      """Return the dtype of the underlying state.  If this is
-                      real, then it is assumed that the states will always be
-                      real and certain optimizations may take place.""")
+    dtype = Attribute(
+        "dtype",
+        """Return the dtype of the underlying state.  If this is real, then it
+        is assumed that the states will always be real and certain
+        optimizations may take place.""")
 
-    t = Attribute("t", """Time at which state is valid.""")
+    t = Attribute(
+        "t",
+        """Time at which state is valid.  This is the time at which potentials
+        should be evaluated etc.  (It will be set by the evolvers before
+        calling the various functions like compute_dy().)""")
 
     def copy():
         """Return a writeable copy of the state."""
@@ -132,10 +138,11 @@ class IState(IStateMinimal):
 
 class INumexpr(Interface):
     """Allows for numexpr optimizations"""
-    dtype = Attribute("dtype",
-                      """Return the dtype of the underlying state.  If this is
-                      real, then it is assumed that the states will always be
-                      real and certain optimizations may take place.""")
+    dtype = Attribute(
+        "dtype",
+        """Return the dtype of the underlying state.  If this is real, then it
+        is assumed that the states will always be real and certain optimizations
+        may take place.""")
 
     def apply(expr, **kwargs):
         """Evaluate the expression using the arguments in ``kwargs`` and store
@@ -152,8 +159,8 @@ class IStateForABMEvolvers(IState):
     These evolvers are very general, requiring only the ability for the problem
     to compute $dy/dt$.
     """
-    def compute_dy(t, dy):
-        """Return `dy/dt` at time `t` using the memory in state `dy`."""
+    def compute_dy(dy):
+        """Return `dy/dt` at time `self.t` using the memory in state `dy`."""
 
 
 class IStateForSplitEvolvers(IState):
@@ -178,10 +185,10 @@ class IStateForSplitEvolvers(IState):
 
     linear = Attribute("linear", "Is the problem linear?")
 
-    def apply_exp_K(dt, t=None):
+    def apply_exp_K(dt):
         r"""Apply $e^{-i K dt}$ in place"""
 
-    def apply_exp_V(dt, state, t=None):
+    def apply_exp_V(dt, state):
         r"""Apply $e^{-i V dt}$ in place using `state` for any
         nonlinear dependence in V. (Linear problems should ignore
         `state`.)"""
@@ -196,10 +203,10 @@ class IStatePotentialsForSplitEvolvers(IStateForSplitEvolvers):
     much more complicated than the non-linear portion of the
     potential, hence only a separate copy of the potentials is maintained.
     """
-    def get_potentials(t):
-        """Return `potentials` at time `t`."""
+    def get_potentials():
+        """Return `potentials` at time `self.t`."""
 
-    def apply_exp_V(dt, potentials, t=None):
+    def apply_exp_V(dt, potentials):
         r"""Apply $e^{-i V dt}$ in place using `potentials`"""
 
 
@@ -304,8 +311,8 @@ class StateMixin(object):
         return self.copy()
 
     def zeros(self):
-        res = self.empty()
-        res[...] = 0
+        res = self.copy()
+        res.scale(0)
         return res
 
     # Here we disable `writeable with a useful error message.  This is
@@ -317,13 +324,15 @@ class StateMixin(object):
     def __getattr__(self, name):
         if name in self._disabled_attributes:
             raise AttributeError(
-                "Cannot get attribute `writable`.  Did you mean `writeable`?")
-        raise AttributeError
+                "Cannot get attribute `{}`.  Did you mean `writeable`?"
+                .format(name))
+        object.__getattribute__(self, name)
 
     def __setattr__(self, name, value):
         if name in self._disabled_attributes:
             raise AttributeError(
-                "Cannot set attribute `writable`.  Did you mean `writeable`?")
+                "Cannot set attribute `{}`.  Did you mean `writeable`?"
+                .format(name))
         super(StateMixin, self).__setattr__(name, value)
 
 
@@ -341,7 +350,9 @@ class StatesMixin(object):
     data = None
 
     def __len__(self):
-        return len(list(self))
+        # Use a comprehension here because calling list(self) will call
+        # __len__() leading to an infinite loop.  Issue #13.
+        return len([_k for _k in self])
 
     def apply(self, expr, **kwargs):
         for _l in self:
@@ -357,7 +368,12 @@ class StatesMixin(object):
     # Requires these methods
     #
     # These default implementations assume self.data is a Sequence of Mapping,
-    # but can be overridden to support custom objects.
+    # but can be overridden to support custom objects.  Note: We do not provide
+    # a __setitem__ method because the user should not set items - instead they
+    # should be mutated since they may represent data on a GPU or elsewhere.
+    # Thus, usage should be `self[key][...] =` rather than `self[key] =`.  To
+    # actually manipulate the data such as when copying, access `self.data`
+    # directly.
     def __iter__(self):
         """Return the list of quantum numbers.
 
@@ -375,23 +391,16 @@ class StatesMixin(object):
         """
         return self.data[key]
 
-    def __setitem__(self, key, value):
-        """Set the data associated with `key`.
-
-        This version assumes `self.data` is either a Sequence or a Mapping.
-        """
-        self.data[key] = value
-
     ######################################################################
     # Default methods using the __iter__() and __getitem__()
     @property
     def dtype(self):
-        # For now assume all arrays have same type
+        # For now assume first array has dtype
         if 'dtype' in self.__dict__:
             dtype = self.__dict__['dtype']
         else:
             dtype = self[self.__iter__().next()].dtype
-        assert all(dtype == self[_k].dtype for _k in self)
+        assert any(dtype == self[_k].dtype for _k in self)
         return dtype
 
     @property
@@ -499,7 +508,10 @@ class ArrayStateMixin(StateMixin):
     def __repr__(self):
         """We can't really do this since we don't know the constructor.  We
         just show the data here."""
-        return "{}({})".format(self.__class__.__name__, repr(self.data))
+        return "{}(t={}, data={})".format(
+            self.__class__.__name__,
+            np.array2string(np.array([self.t]))[1:-1],  # Use numpy formatting
+            repr(self.data))
 
     @property
     def __array_interface__(self):
@@ -542,8 +554,6 @@ class ArraysStateMixin(StatesMixin, ArrayStateMixin):
         """
         y = copy.copy(self)
         y.data = copy.deepcopy(self.data)
-        for key in self:
-            y[key][...] = self[key]
         return y
 
     def empty(self):
@@ -551,7 +561,7 @@ class ArraysStateMixin(StatesMixin, ArrayStateMixin):
         y = copy.copy(self)
         y.data = copy.copy(self.data)
         for key in self:
-            y[key] = np.empty_like(self[key])
+            y.data[key] = np.empty_like(self[key])
         return y
 
     def zeros(self):
@@ -559,7 +569,7 @@ class ArraysStateMixin(StatesMixin, ArrayStateMixin):
         y = copy.copy(self)
         y.data = copy.copy(self.data)
         for key in self:
-            y[key] = np.zeros_like(self[key])
+            y.data[key] = np.zeros_like(self[key])
         return y
 
     def copy_from(self, y):
@@ -583,10 +593,26 @@ class ArraysStateMixin(StatesMixin, ArrayStateMixin):
         for key in self:
             self[key].__imul__(f)
 
+    def __setitem__(self, key, value):
+        """Disable direct setting of items - they should only be mutated.
+
+        If you *need* to set an item, manipulate `self.data` directly.
+        """
+        if key in self:
+            msg = ("Cannot set `state[{}]`. Did you mean `state[{}][...] = `?"
+                   .format(key, key))
+        else:
+            msg = "Cannot create new item `state[{}]`.".format(key)
+        raise TypeError(msg)
+
     @property
     def __array_interface__(self):
         """Allows states to act as arrays with ``np.asarray(state)``."""
-        raise NotImplementedError
+
+        # It is not simply enough to fail here - since we provide __len__()
+        # numpy will try to enumerate through the data.  We must be explicit -
+        # we want an array with a single element.
+        return dict(shape=(1,), typestr='O', version=3)
 
 
 class MultiStateMixin(ArraysStateMixin):
@@ -610,7 +636,7 @@ class MultiStateMixin(ArraysStateMixin):
         y = copy.copy(self)
         y.data = copy.copy(self.data)
         for key in self:
-            y[key] = self[key].empty()
+            y.data[key] = self[key].empty()
         return y
 
     def zeros(self):
@@ -618,5 +644,5 @@ class MultiStateMixin(ArraysStateMixin):
         y = copy.copy(self)
         y.data = copy.copy(self.data)
         for key in self:
-            y[key] = self[key].zeros()
+            y.data[key] = self[key].zeros()
         return y

@@ -38,17 +38,15 @@ class State(ArrayStateMixin):
         self.data = np.zeros(2, dtype=complex)
         self._copy()
 
-    def compute_dy(self, t=0, dy=None):
-        if dy is None:
-            dy = self.copy()
+    def compute_dy(self, dy):
         dy[...] = -self[...]
         return dy
 
-    def apply_exp_K(self, dt, t=None):
+    def apply_exp_K(self, dt):
         r"""Apply $e^{-i K dt}$ in place"""
         pass
 
-    def apply_exp_V(self, dt, t=None, state=None):
+    def apply_exp_V(self, dt, state=None):
         r"""Apply $e^{-i V dt}$ in place"""
         if self.linear:
             # Linear problems should never be called with state
@@ -72,10 +70,10 @@ class StatePotentials(State):
     copies = 0
     max_copies = 0
 
-    def get_potentials(self, t):
+    def get_potentials(self):
         return -1
 
-    def apply_exp_V(self, dt, t=None, potentials=None):
+    def apply_exp_V(self, dt, potentials=None):
         V = potentials
         self *= np.exp(-1j*V*dt)
 

@@ -13,7 +13,7 @@ from ..evolvers import EvolverABM
 class State(ArrayStateMixin):
     """
     >>> State(N=2, dim=1)
-    State(array([ 1.+0.j,  1.+0.j]))
+    State(t= 0., data=array([ 1.+0.j,  1.+0.j]))
     """
     implements([IStateForABMEvolvers])
 
@@ -22,9 +22,7 @@ class State(ArrayStateMixin):
         self.dim = dim
         self.data = np.ones((self.N,)*self.dim, dtype=complex)
 
-    def compute_dy(self, t=0.0, dy=None):
-        if dy is None:
-            dy = self.copy()
+    def compute_dy(self, dy):
         dy[...] = -self[...]
         return dy
 
@@ -32,8 +30,8 @@ class State(ArrayStateMixin):
 class States(ArraysStateMixin):
     """
     >>> States(N=2)
-    States([array([ 1.+0.j,  1.+0.j]),
-            array([ 1.+0.j,  1.+0.j,  1.+0.j, 1.+0.j])])
+    States(t= 0., data=[array([ 1.+0.j,  1.+0.j]),
+                        array([ 1.+0.j,  1.+0.j,  1.+0.j, 1.+0.j])])
     """
     implements([IStateForABMEvolvers])
 
@@ -42,9 +40,7 @@ class States(ArraysStateMixin):
         self.data = [np.ones(self.N, dtype=complex),
                      np.ones(2*self.N, dtype=complex)]
 
-    def compute_dy(self, t=0.0, dy=None):
-        if dy is None:
-            dy = self.copy()
+    def compute_dy(self, dy):
         dy[0][...] = -self[0]
         dy[1][...] = self[1]
         return dy
@@ -53,8 +49,8 @@ class States(ArraysStateMixin):
 class StatesDict(ArraysStateMixin):
     """
     >>> StatesDict(N=2)
-    StatesDict({'a': array([ 1.+0.j,  1.+0.j]),
-                'b': array([ 1.+0.j,  1.+0.j,  1.+0.j,  1.+0.j])})
+    StatesDict(t= 0., data={'a': array([ 1.+0.j,  1.+0.j]),
+                            'b': array([ 1.+0.j,  1.+0.j,  1.+0.j,  1.+0.j])})
 
     """
     implements([IStateForABMEvolvers])
@@ -64,9 +60,7 @@ class StatesDict(ArraysStateMixin):
         self.data = dict(a=np.ones(self.N, dtype=complex),
                          b=np.ones(2*self.N, dtype=complex))
 
-    def compute_dy(self, t=0.0, dy=None):
-        if dy is None:
-            dy = self.copy()
+    def compute_dy(self, dy):
         dy['a'][...] = -self['a']
         dy['b'][...] = self['b']
         return dy
@@ -98,6 +92,7 @@ class TestArrayStateMixin(object):
         s1 = s.copy()
         s *= 2
         assert np.allclose(s.data, s1.data*2)
+        assert np.allclose(s.t, s1.t)
 
         # Regression test for issue 10
         for writeable in [True, False]:
@@ -113,6 +108,7 @@ class TestArrayStateMixin(object):
         s1[...] = s[...]
         s *= 2
         assert np.allclose(s.data, s1.data*2)
+        assert np.allclose(s.t, s1.t)
 
         # Regression test for issue 10
         for writeable in [True, False]:
@@ -129,6 +125,8 @@ class TestArrayStateMixin(object):
         s *= 2
         assert np.allclose(0, s1.data)
         assert np.allclose(s.data, s0.data*2)
+        assert np.allclose(s.t, s0.t)
+        assert np.allclose(s.t, s1.t)
 
         # Regression test for issue 10
         for writeable in [True, False]:
@@ -144,14 +142,14 @@ class TestArrayStateMixin(object):
         s1.copy_from(s)
         s1 += s
         assert np.allclose(s.data*2, s1.data)
+        assert np.allclose(s.t, s1.t)
 
     def test_evolve(self):
         y0 = self.State()
         e = EvolverABM(y=y0, dt=0.01)
         e.evolve(10)
         y = e.y
-        t = e.t
-        assert np.allclose(y.data, y0.data*np.exp(-t))
+        assert np.allclose(y.data, y0.data*np.exp(-y.t))
 
     def test_array_interface(self):
         s = self.State()
@@ -246,6 +244,7 @@ class TestArrayStatesMixin(object):
         s *= 2
         for _k in s:
             assert np.allclose(s[_k], s1[_k]*2)
+        assert np.allclose(s.t, s1.t)
 
     def test_empty(self):
         s = self.State()
@@ -257,6 +256,7 @@ class TestArrayStatesMixin(object):
         s *= 2
         for _k in s:
             assert np.allclose(s[_k], s1[_k]*2)
+        assert np.allclose(s.t, s1.t)
 
     def test_zeros(self):
         s = self.State()
@@ -269,6 +269,8 @@ class TestArrayStatesMixin(object):
         for _k in s:
             assert np.allclose(0, s1[_k])
             assert np.allclose(s[_k], s0[_k]*2)
+        assert np.allclose(s.t, s0.t)
+        assert np.allclose(s.t, s1.t)
 
     def test_copy_from(self):
         s = self.State()
@@ -278,13 +280,14 @@ class TestArrayStatesMixin(object):
         s1.copy_from(s)
         s1 += s
         assert all([np.allclose(s[_k]*2, s1[_k]) for _k in s])
+        assert np.allclose(s.t, s1.t)
 
     def test_evolve(self):
         y0 = self.State()
         e = EvolverABM(y=y0, dt=0.01)
         e.evolve(10)
         y = e.y
-        t = e.t
+        t = y.t
         assert np.allclose(y[0], y0[0]*np.exp(-t))
         assert np.allclose(y[1], y0[1]*np.exp(t))
 
@@ -369,6 +372,7 @@ class TestArrayStatesDictMixin(object):
         s *= 2
         for _k in s:
             assert np.allclose(s[_k], s1[_k]*2)
+        assert np.allclose(s.t, s1.t)
 
     def test_empty(self):
         s = self.State()
@@ -380,6 +384,7 @@ class TestArrayStatesDictMixin(object):
         s *= 2
         for _k in s:
             assert np.allclose(s[_k], s1[_k]*2)
+        assert np.allclose(s.t, s1.t)
 
     def test_zeros(self):
         s = self.State()
@@ -391,6 +396,8 @@ class TestArrayStatesDictMixin(object):
         for _k in s:
             assert np.allclose(0, s1[_k])
             assert np.allclose(s[_k], s0[_k]*2)
+        assert np.allclose(s.t, s0.t)
+        assert np.allclose(s.t, s1.t)
 
     def test_copy_from(self):
         s = self.State()
@@ -400,13 +407,14 @@ class TestArrayStatesDictMixin(object):
         s1.copy_from(s)
         s1 += s
         assert all([np.allclose(s[_k]*2, s1[_k]) for _k in s])
+        assert np.allclose(s.t, s1.t)
 
     def test_evolve(self):
         y0 = self.State()
         e = EvolverABM(y=y0, dt=0.01)
         e.evolve(10)
         y = e.y
-        t = e.t
+        t = y.t
         assert np.allclose(y['a'], y0['a']*np.exp(-t))
         assert np.allclose(y['b'], y0['b']*np.exp(t))
 
@@ -452,3 +460,22 @@ class TestArrayStatesDictMixin(object):
         s3 = s2 / 1.5
         f3 = f2 / 1.5
         check(f3, s3)
+
+    def test_issue_12(self):
+        """Check that only defined attributes can be set."""
+        s = self.State()
+
+        # Can assign data by copying
+        s['a'][...] = np.zeros(s['a'].shape)
+        s['b'][...] = np.zeros(s['b'].shape)
+        with pytest.raises(TypeError):
+            # Cannot set data
+            s['a'] = np.zeros(s['a'].shape)
+
+        with pytest.raises(TypeError):
+            # Cannot set arbitrary data
+            s['c'] = np.zeros(s['a'].shape)
+
+    def test_issue_13(self):
+        s = self.State()
+        assert len(s) == 2

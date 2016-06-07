@@ -13,7 +13,7 @@ from ..evolvers import EvolverABM
 class State(ArrayStateMixin):
     """
     >>> State(N=2, dim=1)
-    State(array([ 1.+0.j,  1.+0.j]))
+    State(t= 0., data=array([ 1.+0.j,  1.+0.j]))
     """
     implements([IStateForABMEvolvers])
 
@@ -22,9 +22,7 @@ class State(ArrayStateMixin):
         self.dim = dim
         self.data = np.ones((self.N,)*self.dim, dtype=complex)
 
-    def compute_dy(self, t=0.0, dy=None):
-        if dy is None:
-            dy = self.copy()
+    def compute_dy(self, dy):
         dy.data[...] = -self.data
         return dy
 
@@ -35,20 +33,21 @@ class MultiState(MultiStateMixin):
     >>> s2 = State(N=3)
     >>> s = MultiState(data=[s1, s2])
     >>> s
-    MultiState([State(array([[ 1.+0.j,  1.+0.j],
-                             [ 1.+0.j,  1.+0.j]])),
-                State(array([[ 1.+0.j,  1.+0.j,  1.+0.j],
-                             [ 1.+0.j,  1.+0.j,  1.+0.j],
-                             [ 1.+0.j,  1.+0.j,  1.+0.j]]))])
+    MultiState(t= 0.,
+               data=[State(t= 0.,
+                           data=array([[ 1.+0.j,  1.+0.j],
+                                       [ 1.+0.j,  1.+0.j]])),
+                     State(t= 0.,
+                           data=array([[ 1.+0.j,  1.+0.j,  1.+0.j],
+                                       [ 1.+0.j,  1.+0.j,  1.+0.j],
+                                       [ 1.+0.j,  1.+0.j,  1.+0.j]]))])
     """
     implements([IStateForABMEvolvers])
 
     def __init__(self, data):
         self.data = [_d.copy() for _d in data]
 
-    def compute_dy(self, t=0.0, dy=None):
-        if dy is None:
-            dy = self.copy()
+    def compute_dy(self, dy):
         dy[0][...] = -self[0]
         dy[1][...] = self[1]
         return dy
@@ -60,20 +59,21 @@ class MultiStateDict(MultiStateMixin):
     >>> b = State(N=3)
     >>> s = MultiStateDict(data=dict(a=a, b=b))
     >>> s
-    MultiStateDict({'a': State(array([[ 1.+0.j,  1.+0.j],
-                                      [ 1.+0.j,  1.+0.j]])),
-                    'b': State(array([[ 1.+0.j,  1.+0.j,  1.+0.j],
-                                      [ 1.+0.j,  1.+0.j,  1.+0.j],
-                                      [ 1.+0.j,  1.+0.j,  1.+0.j]]))})
+    MultiStateDict(t= 0.,
+                   data={'a': State(t= 0.,
+                                    data=array([[ 1.+0.j,  1.+0.j],
+                                                [ 1.+0.j,  1.+0.j]])),
+                         'b': State(t= 0.,
+                                    data=array([[ 1.+0.j,  1.+0.j,  1.+0.j],
+                                                [ 1.+0.j,  1.+0.j,  1.+0.j],
+                                                [ 1.+0.j,  1.+0.j,  1.+0.j]]))})
     """
     implements([IStateForABMEvolvers])
 
     def __init__(self, data):
         self.data = dict([(_k, data[_k].copy()) for _k in data])
 
-    def compute_dy(self, t=0.0, dy=None):
-        if dy is None:
-            dy = self.copy()
+    def compute_dy(self, dy):
         dy['a'][...] = -self['a']
         dy['b'][...] = self['b']
         return dy
@@ -117,6 +117,7 @@ class TestMultiStateMixin(object):
         s1 = s.copy()
         s *= 2
         assert all([np.allclose(s[_k], s1[_k]*2) for _k in s])
+        assert np.allclose(s.t, s1.t)
 
         # Regression test for issue 10
         for writeable in [True, False]:
@@ -134,6 +135,7 @@ class TestMultiStateMixin(object):
             s1[_k][...] = s[_k]
         s *= 2
         assert all([np.allclose(s[_k], s1[_k]*2) for _k in s])
+        assert np.allclose(s.t, s1.t)
 
     def test_zeros(self):
         s = self.State()
@@ -144,6 +146,8 @@ class TestMultiStateMixin(object):
         s *= 2
         assert all([np.allclose(0, s1[_k]) for _k in s])
         assert all([np.allclose(s[_k], s0[_k]*2) for _k in s])
+        assert np.allclose(s.t, s0.t)
+        assert np.allclose(s.t, s1.t)
 
     def test_copy_from(self):
         s = self.State()
@@ -153,13 +157,14 @@ class TestMultiStateMixin(object):
         s1.copy_from(s)
         s1 += s
         assert all([np.allclose(s[_k]*2, s1[_k]) for _k in s])
+        assert np.allclose(s.t, s1.t)
 
     def test_evolve(self):
         y0 = self.State()
         e = EvolverABM(y=y0, dt=0.01)
         e.evolve(10)
         y = e.y
-        t = e.t
+        t = y.t
         assert np.allclose(y[0], y0[0]*np.exp(-t))
         assert np.allclose(y[1], y0[1]*np.exp(t))
 
@@ -238,6 +243,7 @@ class TestMultiStateDictMixin(object):
         s *= 2
         for _k in s:
             assert np.allclose(s[_k], s1[_k]*2)
+        assert np.allclose(s.t, s1.t)
 
     def test_empty(self):
         s = self.State()
@@ -258,6 +264,8 @@ class TestMultiStateDictMixin(object):
         s *= 2
         assert all([np.allclose(0, s1[_k]) for _k in s])
         assert all([np.allclose(s[_k], s0[_k]*2) for _k in s])
+        assert np.allclose(s.t, s0.t)
+        assert np.allclose(s.t, s1.t)
 
     def test_copy_from(self):
         s = self.State()
@@ -267,13 +275,14 @@ class TestMultiStateDictMixin(object):
         s1.copy_from(s)
         s1 += s
         assert all([np.allclose(s[_k]*2, s1[_k]) for _k in s])
+        assert np.allclose(s.t, s1.t)
 
     def test_evolve(self):
         y0 = self.State()
         e = EvolverABM(y=y0, dt=0.01)
         e.evolve(10)
         y = e.y
-        t = e.t
+        t = y.t
         assert np.allclose(y['a'], y0['a']*np.exp(-t))
         assert np.allclose(y['b'], y0['b']*np.exp(t))
 
@@ -322,3 +331,18 @@ class TestMultiStateDictMixin(object):
         s3 = s2 / 1.5
         f3 = f2 / 1.5
         check(f3, s3)
+
+    def test_issue_12(self):
+        """Check that only defined attributes can be set."""
+        s = self.State()
+
+        # Can assign data by copying
+        s['a'][...] = s['a'].zeros()
+        s['b'][...] = s['b'].zeros()
+        with pytest.raises(TypeError):
+            # Cannot set data
+            s['a'] = s['a'].zeros()
+
+        with pytest.raises(TypeError):
+            # Cannot set arbitrary data
+            s['c'] = s['a'].zeros()
