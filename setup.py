@@ -50,7 +50,7 @@ del mod
 
 
 setup(name=NAME,
-      version='0.8.0.dev0',
+      version='0.8.0',
       packages=find_packages(exclude=['tests']),
 
       setup_requires=setup_requires,
