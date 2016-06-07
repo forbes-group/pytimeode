@@ -24,9 +24,7 @@ setup_requires = [
 ]
 
 install_requires = [
-    'mmf_setup',
-    'mmfutils>=0.4.7',
-    'persist>=0.9b2',
+    'mmfutils>=0.4.8',
     'zope.interface>=3.8.0'
 ]
 
@@ -38,6 +36,10 @@ test_requires = [
     'flake8',
     'pep8==1.5.7',     # Needed by flake8: dependency resolution issue if not pinned
 ]
+
+extras_require = dict(
+    doc=['mmf_setup'],
+)
 
 # Remove NAME from sys.modules so that it gets covered in tests. See
 # http://stackoverflow.com/questions/11279096
@@ -54,7 +56,7 @@ setup(name=NAME,
       setup_requires=setup_requires,
       install_requires=install_requires,
       tests_require=test_requires,
-      extras_require={},
+      extras_require=extras_require,
 
       # Metadata
       author='Michael McNeil Forbes',
