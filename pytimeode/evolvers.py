@@ -13,8 +13,6 @@ things:
 """
 from __future__ import division
 
-__all__ = ['EvolverABM', 'EvolverSplit']
-
 import numpy as np
 
 from mmfutils import interface
@@ -22,6 +20,8 @@ from mmfutils import interface
 from . import interfaces
 from .utils import numexpr, Object
 from .utils import expr
+
+__all__ = ['EvolverABM', 'EvolverSplit']
 
 
 ######################################################################

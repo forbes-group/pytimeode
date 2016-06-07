@@ -1,12 +1,11 @@
 r"""Utilities"""
 from __future__ import division
-__all__ = [
-    'Object', 'numexpr',
-]
 
 import numpy as np
 
 _EPS = np.finfo(float).eps
+
+__all__ = ['Object', 'numexpr']
 
 
 numexpr = False
