@@ -25,7 +25,8 @@ setup_requires = [
 
 install_requires = [
     'mmfutils>=0.4.8',
-    'zope.interface>=3.8.0'
+    'zope.interface>=3.8.0',
+    'sympy'
 ]
 
 test_requires = [
@@ -50,7 +51,7 @@ del mod
 
 
 setup(name=NAME,
-      version='0.8.0',
+      version='0.8.1',
       packages=find_packages(exclude=['tests']),
 
       setup_requires=setup_requires,
