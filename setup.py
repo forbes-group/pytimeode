@@ -25,7 +25,8 @@ setup_requires = [
 
 install_requires = [
     'mmfutils>=0.4.8',
-    'zope.interface>=3.8.0'
+    'zope.interface>=3.8.0',
+    'sympy'
 ]
 
 test_requires = [
